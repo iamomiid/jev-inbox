@@ -1,0 +1,93 @@
+.gc-root {
+  background: #ffffff;
+  border: 1px solid #e0e0e0;
+  border-left: 3px solid #d93025;
+  border-radius: 4px;
+  margin: 8px 0;
+  font-family: Roboto, Arial, sans-serif;
+  font-size: 13px;
+  color: #202124;
+  padding: 8px 12px;
+}
+
+.gc-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 4px;
+}
+
+.gc-title {
+  font-family: "Google Sans", Roboto, Arial, sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  color: #202124;
+}
+
+.gc-count {
+  font-size: 12px;
+  color: #5f6368;
+}
+
+.gc-status {
+  font-size: 12px;
+  color: #5f6368;
+  padding: 4px 0;
+}
+
+.gc-error {
+  font-size: 12px;
+  color: #d93025;
+  padding: 4px 0;
+}
+
+.gc-item {
+  cursor: pointer;
+  padding: 8px 0;
+  border-top: 1px solid #f1f3f4;
+}
+
+.gc-item:hover {
+  background: #fafafa;
+}
+
+.gc-top {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.gc-from {
+  font-weight: 700;
+  flex: 0 1 auto;
+}
+
+.gc-cat {
+  background: #fce8e6;
+  color: #c5221f;
+  font-size: 11px;
+  border-radius: 3px;
+  padding: 1px 6px;
+  flex: none;
+}
+
+.gc-date {
+  margin-left: auto;
+  color: #5f6368;
+  font-size: 12px;
+  flex: none;
+}
+
+.gc-subject {
+  font-weight: 500;
+  margin-top: 2px;
+}
+
+.gc-snippet {
+  color: #5f6368;
+  font-size: 12px;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

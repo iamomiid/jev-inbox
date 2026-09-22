@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "Gmail Critical",
+  "version": "0.1.0",
+  "description": "A Critical section above the Gmail inbox list, classified by TypeSafe Jev.",
+  "permissions": ["storage"],
+  "host_permissions": ["https://mail.google.com/*", "https://ai-gateway.vercel.sh/*"],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://mail.google.com/*"],
+      "js": ["content.js"],
+      "css": ["section.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Gmail Critical"
+  }
+}

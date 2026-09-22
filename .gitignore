@@ -2,4 +2,5 @@
 .env.*
 node_modules/
 dist/
+fixtures/
 .DS_Store
