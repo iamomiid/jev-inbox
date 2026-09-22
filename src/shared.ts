@@ -102,6 +102,16 @@ export function isLabelConfig(value: unknown): value is LabelConfig {
   );
 }
 
+export function isClassification(value: unknown): value is Classification {
+  if (typeof value !== 'object' || value === null) return false;
+  const v = value as Record<string, unknown>;
+  if (typeof v.criticalProbability !== 'number') return false;
+  if (typeof v.urgencyScore !== 'number') return false;
+  const labels = v.labels;
+  if (typeof labels !== 'object' || labels === null) return false;
+  return Object.values(labels).every((probability) => typeof probability === 'number');
+}
+
 const THREAD_ID = /^[A-Za-z0-9]{16,}$/;
 
 const TWO_SEGMENT_LIST_HEADS: Record<string, true> = {

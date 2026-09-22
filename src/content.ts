@@ -2,6 +2,7 @@ import {
   DEFAULT_SETTINGS,
   VIEWS,
   VIEW_SETTING_KEYS,
+  isClassification,
   isLabelConfig,
   labelsHash,
   threadKey,
@@ -17,7 +18,6 @@ type Entry = {
   key: string;
   state: EmailState;
   row: HTMLTableRowElement;
-  classification?: Classification;
   failureCount: number;
   nextAttemptAt: number;
 };
@@ -25,7 +25,11 @@ type Entry = {
 type Tracked = {
   row: HTMLTableRowElement;
   index: number;
-  entry: Entry | undefined;
+};
+
+type Ranked = Tracked & {
+  unread: boolean;
+  classification: Classification | undefined;
 };
 
 const DEBOUNCE_MS = 800;
@@ -33,12 +37,7 @@ const BATCH_SIZE = 20;
 const BASE_BACKOFF_MS = 60_000;
 const MAX_BACKOFF_MS = 600_000;
 const CHIP_HUES = 8;
-const STORAGE_KEYS = [
-  'enabled',
-  'threshold',
-  'labels',
-  ...VIEWS.map((view) => VIEW_SETTING_KEYS[view]),
-];
+const CACHE_PREFIX = 'crit:';
 
 let bar: HTMLElement | null = null;
 let observer: MutationObserver | null = null;
@@ -54,6 +53,9 @@ let generation = 0;
 let retryId: number | undefined;
 let currentList: HTMLElement | null = null;
 let orderList: HTMLElement | null = null;
+let animateNextOrder = false;
+let orderPassQueued = false;
+let flipCleanupId: number | undefined;
 
 const viewEnabled: Record<View, boolean> = {
   inbox: DEFAULT_SETTINGS.viewInbox,
@@ -64,6 +66,7 @@ const viewEnabled: Record<View, boolean> = {
 
 const candidates = new Map<string, Entry>();
 const orderIndex = new Map<string, number>();
+const classifications = new Map<string, Classification>();
 
 function schedule(): void {
   clearTimeout(debounceId);
@@ -86,7 +89,7 @@ function armRetry(): void {
   const now = Date.now();
   let earliest: number | undefined;
   for (const entry of candidates.values()) {
-    if (entry.classification !== undefined) continue;
+    if (classifications.has(entry.key)) continue;
     if (earliest === undefined || entry.nextAttemptAt < earliest) earliest = entry.nextAttemptAt;
   }
   if (earliest === undefined) return;
@@ -164,22 +167,13 @@ function dispatchableEntries(): Entry[] {
   const now = Date.now();
   const out: Entry[] = [];
   for (const entry of candidates.values()) {
-    if (entry.classification === undefined && entry.nextAttemptAt <= now) out.push(entry);
+    if (!classifications.has(entry.key) && entry.nextAttemptAt <= now) out.push(entry);
   }
   return out;
 }
 
-function pendingCount(): number {
-  let count = 0;
-  for (const entry of candidates.values()) {
-    if (entry.classification === undefined) count += 1;
-  }
-  return count;
-}
-
-function isCritical(entry: Entry): boolean {
-  const classification = entry.classification;
-  return classification !== undefined && classification.criticalProbability >= threshold;
+function isCriticalClassification(classification: Classification): boolean {
+  return classification.criticalProbability >= threshold;
 }
 
 function recordFailure(entry: Entry): void {
@@ -203,9 +197,41 @@ function isOwnRecord(record: MutationRecord): boolean {
   return nodes.every(isGcNode);
 }
 
+function touchesList(records: MutationRecord[]): boolean {
+  for (const record of records) {
+    if (
+      currentList !== null &&
+      record.target instanceof Node &&
+      currentList.contains(record.target)
+    ) {
+      return true;
+    }
+    for (const node of [...record.addedNodes, ...record.removedNodes]) {
+      if (!(node instanceof Element)) continue;
+      if (node.tagName === 'TR' || node.querySelector('tr.zA') !== null) return true;
+    }
+  }
+  return false;
+}
+
 function rowThreadId(row: HTMLTableRowElement): string | null {
   const carrier = row.querySelector('[data-thread-id]');
   return carrier?.getAttribute('data-thread-id') ?? null;
+}
+
+function cacheKeyOf(row: HTMLTableRowElement): string | null {
+  const carrier = row.querySelector('[data-thread-id]');
+  if (carrier === null) return null;
+  const threadId = carrier.getAttribute('data-thread-id');
+  const lastMessageId = carrier.getAttribute('data-legacy-last-message-id');
+  if (threadId === null || lastMessageId === null) return null;
+  return `${threadId}|${lastMessageId}|${labelsVersion}`;
+}
+
+function classifiableUnreadKey(row: HTMLTableRowElement): string | null {
+  if (!row.classList.contains('zE')) return null;
+  if (row.querySelector('span.zF[email][name]') === null) return null;
+  return cacheKeyOf(row);
 }
 
 function recordOrder(list: HTMLElement): void {
@@ -253,33 +279,75 @@ function applyOrder(rows: HTMLTableRowElement[]): void {
 function applyRowOrder(): void {
   const list = currentList;
   if (list === null) return;
-  const entryByRow = new Map<HTMLTableRowElement, Entry>();
-  for (const entry of candidates.values()) entryByRow.set(entry.row, entry);
-  const tracked: Tracked[] = [];
+  const ranked: Ranked[] = [];
   for (const row of list.querySelectorAll<HTMLTableRowElement>('tr.zA')) {
     const id = rowThreadId(row);
     if (id === null) continue;
     const index = orderIndex.get(id);
     if (index === undefined) continue;
-    tracked.push({ row, index, entry: entryByRow.get(row) });
+    const key = cacheKeyOf(row);
+    ranked.push({
+      row,
+      index,
+      unread: row.classList.contains('zE'),
+      classification: key === null ? undefined : classifications.get(key),
+    });
   }
-  const critical: Tracked[] = [];
-  const unread: Tracked[] = [];
-  const read: Tracked[] = [];
-  for (const item of tracked) {
-    if (item.entry === undefined) read.push(item);
-    else if (isCritical(item.entry)) critical.push(item);
-    else unread.push(item);
+  const critical: Ranked[] = [];
+  const unread: Ranked[] = [];
+  const read: Ranked[] = [];
+  for (const item of ranked) {
+    if (!item.unread) read.push(item);
+    else if (item.classification !== undefined && isCriticalClassification(item.classification)) {
+      critical.push(item);
+    } else unread.push(item);
   }
   critical.sort((a, b) => {
-    const entryA = a.entry;
-    const entryB = b.entry;
-    if (entryA === undefined || entryB === undefined) return 0;
-    return compareEntries(entryA, entryB);
+    const classificationA = a.classification;
+    const classificationB = b.classification;
+    if (classificationA === undefined || classificationB === undefined) return 0;
+    return compareClassifications(classificationA, classificationB);
   });
   unread.sort((a, b) => a.index - b.index);
   read.sort((a, b) => a.index - b.index);
+  const animate =
+    animateNextOrder && !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  animateNextOrder = false;
+  const before = animate
+    ? new Map(ranked.map((item) => [item.row, item.row.getBoundingClientRect()]))
+    : null;
   applyOrder([...critical, ...unread, ...read].map((item) => item.row));
+  if (before !== null) flipMoved(ranked, before);
+}
+
+function flipMoved(ranked: Ranked[], before: Map<HTMLTableRowElement, DOMRect>): void {
+  const moved: { row: HTMLTableRowElement; dx: number; dy: number }[] = [];
+  for (const item of ranked) {
+    const first = before.get(item.row);
+    if (first === undefined) continue;
+    const last = item.row.getBoundingClientRect();
+    const dx = first.left - last.left;
+    const dy = first.top - last.top;
+    if (dx === 0 && dy === 0) continue;
+    moved.push({ row: item.row, dx, dy });
+  }
+  if (moved.length === 0) return;
+  for (const item of moved) {
+    item.row.style.transform = `translate(${item.dx}px, ${item.dy}px)`;
+  }
+  void document.body.offsetWidth;
+  for (const item of moved) {
+    item.row.style.transition = 'transform 180ms';
+    item.row.style.transform = '';
+  }
+  clearTimeout(flipCleanupId);
+  flipCleanupId = window.setTimeout(() => {
+    flipCleanupId = undefined;
+    for (const item of moved) {
+      item.row.style.transition = '';
+      item.row.style.transform = '';
+    }
+  }, 250);
 }
 
 function restoreList(list: HTMLElement | null): void {
@@ -290,7 +358,7 @@ function restoreList(list: HTMLElement | null): void {
     if (id === null) continue;
     const index = orderIndex.get(id);
     if (index === undefined) continue;
-    tracked.push({ row, index, entry: undefined });
+    tracked.push({ row, index });
   }
   tracked.sort((a, b) => a.index - b.index);
   applyOrder(tracked.map((item) => item.row));
@@ -298,7 +366,7 @@ function restoreList(list: HTMLElement | null): void {
   observer?.takeRecords();
 }
 
-async function sync(): Promise<void> {
+function runOrderPass(): void {
   const view = currentView();
   const list = visibleList();
   if (list !== orderList) {
@@ -315,6 +383,25 @@ async function sync(): Promise<void> {
     currentList = null;
     return;
   }
+  recordOrder(list);
+  currentList = list;
+  ensureBar(list);
+  render();
+}
+
+function applyOrderNow(): void {
+  if (orderPassQueued) return;
+  orderPassQueued = true;
+  queueMicrotask(() => {
+    orderPassQueued = false;
+  });
+  runOrderPass();
+}
+
+async function sync(): Promise<void> {
+  runOrderPass();
+  if (currentList === null || !dispatchAllowed()) return;
+  const list = currentList;
   const seen = new Set<string>();
   const next = new Map<string, Entry>();
   for (const el of list.querySelectorAll<HTMLTableRowElement>('tr.zA.zE')) {
@@ -332,13 +419,7 @@ async function sync(): Promise<void> {
   }
   candidates.clear();
   for (const [key, entry] of next.entries()) candidates.set(key, entry);
-
-  recordOrder(list);
-  currentList = list;
-  ensureBar(list);
-  render();
   await dispatchPending();
-  render();
 }
 
 function removeBar(): void {
@@ -380,6 +461,7 @@ async function dispatchPending(): Promise<void> {
   }
   inFlight = true;
   errorMessage = null;
+  render();
   const startedGeneration = generation;
   const startedList = visibleList();
   const attempted = new Set<string>();
@@ -413,14 +495,16 @@ async function dispatchPending(): Promise<void> {
       for (const entry of batch) recordFailure(entry);
       break;
     }
+    let applied = false;
     let authFailure = false;
     let rowFailure = false;
     for (const entry of batch) {
       const classification = response.results[entry.key];
       if (classification !== undefined) {
-        entry.classification = classification;
+        classifications.set(entry.key, classification);
         entry.failureCount = 0;
         entry.nextAttemptAt = 0;
+        applied = true;
         continue;
       }
       rowFailure = true;
@@ -436,6 +520,7 @@ async function dispatchPending(): Promise<void> {
     } else if (rowFailure) {
       errorMessage = 'Classification request failed.';
     }
+    if (applied) animateNextOrder = true;
     render();
   }
   inFlight = false;
@@ -443,20 +528,24 @@ async function dispatchPending(): Promise<void> {
   armRetry();
 }
 
-function compareEntries(a: Entry, b: Entry): number {
-  const ua = a.classification?.urgencyScore ?? 0;
-  const ub = b.classification?.urgencyScore ?? 0;
-  if (ub !== ua) return ub - ua;
-  const pa = a.classification?.criticalProbability ?? 0;
-  const pb = b.classification?.criticalProbability ?? 0;
-  return pb - pa;
+function compareClassifications(a: Classification, b: Classification): number {
+  if (b.urgencyScore !== a.urgencyScore) return b.urgencyScore - a.urgencyScore;
+  return b.criticalProbability - a.criticalProbability;
 }
 
 function renderBar(): void {
   if (bar === null) return;
-  const total = candidates.size;
-  const pending = pendingCount();
-  const status = inFlight && pending > 0 ? pending : 0;
+  let total = 0;
+  let remaining = 0;
+  if (currentList !== null) {
+    for (const row of currentList.querySelectorAll<HTMLTableRowElement>('tr.zA.zE')) {
+      const key = classifiableUnreadKey(row);
+      if (key === null) continue;
+      total += 1;
+      if (!classifications.has(key)) remaining += 1;
+    }
+  }
+  const status = inFlight ? remaining : 0;
   const signature = `${total}|${status}|${errorMessage ?? ''}`;
   if (bar.dataset.gcSig === signature) return;
   bar.dataset.gcSig = signature;
@@ -468,8 +557,11 @@ function renderBar(): void {
   if (status > 0) {
     const statusEl = document.createElement('span');
     statusEl.className = 'gc-status';
-    statusEl.textContent = `classifying ${status}...`;
+    statusEl.textContent = `Classifying ${remaining} of ${total} unread`;
     bar.appendChild(statusEl);
+    const progress = document.createElement('span');
+    progress.className = 'gc-progress';
+    bar.appendChild(progress);
   }
   if (errorMessage) {
     const err = document.createElement('span');
@@ -493,10 +585,9 @@ function chipSlot(row: HTMLTableRowElement): HTMLElement | null {
   return slot;
 }
 
-function chipSignature(entry: Entry): string {
-  const classification = entry.classification;
-  if (classification === undefined) return `p:${entry.failureCount}`;
-  let signature = `c:${isCritical(entry)}|${threshold}|${labelsVersion}|`;
+function chipSignature(classification: Classification | undefined, failureCount: number): string {
+  if (classification === undefined) return `p:${failureCount}`;
+  let signature = `c:${isCriticalClassification(classification)}|${threshold}|${labelsVersion}|`;
   for (const label of labels) {
     const probability = classification.labels[label.id];
     if (probability === undefined || probability < threshold) continue;
@@ -509,23 +600,31 @@ function renderChips(): void {
   const list = currentList;
   if (list === null) return;
   for (const stale of list.querySelectorAll('tr.zA:not(.zE) span.gc-chips')) stale.remove();
-  for (const entry of candidates.values()) {
-    if (!entry.row.isConnected) continue;
-    const slot = chipSlot(entry.row);
+  for (const row of list.querySelectorAll<HTMLTableRowElement>('tr.zA.zE')) {
+    const key = classifiableUnreadKey(row);
+    if (key === null) continue;
+    const slot = chipSlot(row);
     if (slot === null) continue;
-    const signature = chipSignature(entry);
+    const classification = classifications.get(key);
+    const failureCount = candidates.get(key)?.failureCount ?? 0;
+    const signature = chipSignature(classification, failureCount);
     if (slot.dataset.gcSig === signature) continue;
     slot.dataset.gcSig = signature;
     slot.textContent = '';
-    const classification = entry.classification;
     if (classification === undefined) {
-      const pending = document.createElement('span');
-      pending.className = 'gc-pending';
-      pending.textContent = entry.failureCount > 0 ? 'retrying' : 'classifying';
-      slot.appendChild(pending);
+      if (failureCount > 0) {
+        const pending = document.createElement('span');
+        pending.className = 'gc-pending';
+        pending.textContent = 'retrying';
+        slot.appendChild(pending);
+      } else {
+        const dot = document.createElement('span');
+        dot.className = 'gc-dot';
+        slot.appendChild(dot);
+      }
       continue;
     }
-    if (isCritical(entry)) {
+    if (isCriticalClassification(classification)) {
       const badge = document.createElement('span');
       badge.className = 'gc-badge';
       badge.textContent = 'Critical';
@@ -552,7 +651,7 @@ function render(): void {
 }
 
 async function bootstrap(): Promise<void> {
-  const stored = await chrome.storage.local.get(STORAGE_KEYS);
+  const stored = await chrome.storage.local.get(null);
   if (typeof stored.enabled === 'boolean') enabled = stored.enabled;
   if (typeof stored.threshold === 'number') threshold = stored.threshold;
   if (Array.isArray(stored.labels)) labels = stored.labels.filter(isLabelConfig);
@@ -562,17 +661,32 @@ async function bootstrap(): Promise<void> {
     const storedValue = stored[key];
     if (typeof storedValue === 'boolean') viewEnabled[view] = storedValue;
   }
+  for (const [storageKey, value] of Object.entries(stored)) {
+    if (!storageKey.startsWith(CACHE_PREFIX)) continue;
+    const cacheKey = storageKey.slice(CACHE_PREFIX.length);
+    if (!cacheKey.endsWith(`|${labelsVersion}`)) continue;
+    if (isClassification(value)) classifications.set(cacheKey, value);
+  }
   observer = new MutationObserver((records) => {
     if (records.every(isOwnRecord)) return;
+    if (touchesList(records)) applyOrderNow();
     schedule();
   });
   observer.observe(document.documentElement, { childList: true, subtree: true });
   window.addEventListener('hashchange', () => {
     generation += 1;
+    applyOrderNow();
     schedule();
   });
   chrome.storage.onChanged.addListener((changes) => {
     let structural = false;
+    for (const [storageKey, change] of Object.entries(changes)) {
+      if (!storageKey.startsWith(CACHE_PREFIX)) continue;
+      const cacheKey = storageKey.slice(CACHE_PREFIX.length);
+      if (!cacheKey.endsWith(`|${labelsVersion}`)) continue;
+      if (isClassification(change.newValue)) classifications.set(cacheKey, change.newValue);
+      else classifications.delete(cacheKey);
+    }
     if (changes.apiKey) {
       halted = false;
       for (const entry of candidates.values()) {
@@ -585,6 +699,7 @@ async function bootstrap(): Promise<void> {
       labels = Array.isArray(value) ? value.filter(isLabelConfig) : [];
       labelsVersion = labelsHash(labels);
       candidates.clear();
+      classifications.clear();
       structural = true;
     }
     if (changes.enabled) {

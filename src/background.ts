@@ -1,5 +1,6 @@
 import { classifyEmail } from './gateway';
 import {
+  isClassification,
   isEmailState,
   isLabelConfig,
   labelsHash,
@@ -124,14 +125,4 @@ function classifyRequest(value: unknown): ClassifyMessage | undefined {
   if (emails.length !== value.emails.length) return undefined;
   if (labels.length !== value.labels.length) return undefined;
   return { type: 'classify', emails, labels };
-}
-
-function isClassification(value: unknown): value is Classification {
-  if (typeof value !== 'object' || value === null) return false;
-  const v = value as Record<string, unknown>;
-  if (typeof v.criticalProbability !== 'number') return false;
-  if (typeof v.urgencyScore !== 'number') return false;
-  const labels = v.labels;
-  if (typeof labels !== 'object' || labels === null) return false;
-  return Object.values(labels).every((probability) => typeof probability === 'number');
 }

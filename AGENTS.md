@@ -21,7 +21,7 @@ Commands:
 File map (`src/`):
 
 - `background.ts`: service worker. Handles `classify` messages, reads the key, caches classifications in `chrome.storage.local` under a key that includes the labels hash, fans out to the gateway, and reports per-row failures with the HTTP status.
-- `content.ts`: content script. Parses the current view from the hash, watches the visible list DOM, extracts unread rows, requests classification, moves the unread rows to the top of Gmail's own list with critical rows first, writes label chips inside the rows, renders the status bar, backs off failed rows, and halts on auth failures until the key changes.
+- `content.ts`: content script. Parses the current view from the hash, watches the visible list DOM, reorders the rows to the top of Gmail's own list with critical rows first synchronously in the observer callback, before the next paint, from the classifications it keeps in memory, extracts and dispatches the unread rows that still need classification, writes label chips and loading dots inside the rows, renders the status bar with its progress line, animates a row that becomes critical, backs off failed rows, and halts on auth failures until the key changes.
 - `gateway.ts`: `classifyEmail`. Builds and runs one Jev evaluation call: critical, urgency, and one boolean question per label.
 - `shared.ts`: shared types, settings defaults, label config, validators, `labelsHash`, `threadKey`, view and hash parsing.
 - `popup.ts`: popup logic. Saves key, enabled, threshold, the Show on view toggles, and the label list, clears the classification cache.
@@ -38,4 +38,4 @@ Thinking, strategy, and decisions live outside this repo.
 3. Chrome: chrome://extensions, enable Developer mode, "Load unpacked", select the `dist/` folder.
 4. Open the extension popup, paste the TypeSafe Jev key (Vercel AI Gateway), leave "Enabled" on, pick the views under "Show on", add labels if wanted. Gmail: mail.google.com moves the unread rows of the visible list to the top and shows the status bar on the enabled views.
 
-`npx tsc --noEmit` typechecks. Calls go to `https://ai-gateway.vercel.sh/v4/ai`; the key lives in `chrome.storage.local`; the content script never sees it.
+`npx tsc --noEmit` typechecks. Calls go to `https://ai-gateway.vercel.sh/v4/ai`; the key lives in `chrome.storage.local` and only the service worker uses it. The content script reads storage in bulk at bootstrap and keeps only the settings and the `crit:` cache entries.
