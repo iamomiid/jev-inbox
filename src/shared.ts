@@ -1,13 +1,30 @@
+export const VIEWS: readonly View[] = ['inbox', 'tabs', 'search', 'other'];
+
+export type View = 'inbox' | 'tabs' | 'search' | 'other';
+
+export type ViewSettingKey = 'viewInbox' | 'viewTabs' | 'viewSearch' | 'viewOther';
+
+export const VIEW_SETTING_KEYS: Record<View, ViewSettingKey> = {
+  inbox: 'viewInbox',
+  tabs: 'viewTabs',
+  search: 'viewSearch',
+  other: 'viewOther',
+};
+
 export type Settings = {
   apiKey: string;
   enabled: boolean;
   threshold: number;
-};
+} & Record<ViewSettingKey, boolean>;
 
 export const DEFAULT_SETTINGS: Settings = {
   apiKey: '',
   enabled: true,
   threshold: 0.7,
+  viewInbox: true,
+  viewTabs: true,
+  viewSearch: true,
+  viewOther: false,
 };
 
 export type Category =
@@ -72,4 +89,32 @@ export function isEmailState(value: unknown): value is EmailState {
     typeof v.snippet === 'string' &&
     typeof v.date === 'string'
   );
+}
+
+const THREAD_ID = /^[A-Za-z0-9]{16,}$/;
+
+export function viewFromHash(hash: string): View | null {
+  const parts: string[] = [];
+  for (const raw of hash.replace(/^#/, '').split('?')[0].split('/')) {
+    if (raw.length === 0) continue;
+    try {
+      parts.push(decodeURIComponent(raw));
+    } catch {
+      parts.push(raw);
+    }
+  }
+  if (parts.length === 0) return 'inbox';
+  if (THREAD_ID.test(parts[parts.length - 1])) return null;
+  const head = parts[0];
+  if (head === 'inbox') return 'inbox';
+  if (head === 'category') return 'tabs';
+  if (head === 'search' || head === 'advanced-search') return 'search';
+  return 'other';
+}
+
+export function threadHash(hash: string, legacyThreadId: string): string {
+  const parts = hash.replace(/^#/, '').split('?')[0].split('/').filter((part) => part.length > 0);
+  const last = parts[parts.length - 1];
+  const list = last !== undefined && THREAD_ID.test(last) ? parts.slice(0, -1) : parts;
+  return list.length > 0 ? `#${list.join('/')}/${legacyThreadId}` : `#inbox/${legacyThreadId}`;
 }

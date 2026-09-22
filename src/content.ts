@@ -1,4 +1,16 @@
-import { CATEGORY_LABELS, threadKey, type ClassifyResult, type Classification, type EmailState } from './shared';
+import {
+  CATEGORY_LABELS,
+  DEFAULT_SETTINGS,
+  VIEWS,
+  VIEW_SETTING_KEYS,
+  threadHash,
+  threadKey,
+  viewFromHash,
+  type ClassifyResult,
+  type Classification,
+  type EmailState,
+  type View,
+} from './shared';
 
 type Entry = {
   key: string;
@@ -7,15 +19,21 @@ type Entry = {
 };
 
 const DEBOUNCE_MS = 800;
-const STORAGE_KEYS = ['apiKey', 'enabled', 'threshold'];
+const STORAGE_KEYS = ['enabled', 'threshold', ...VIEWS.map((view) => VIEW_SETTING_KEYS[view])];
 
 let section: HTMLElement | null = null;
-let sectionParent: HTMLElement | null = null;
 let inFlight = false;
 let errorMessage: string | null = null;
-let enabled = true;
-let threshold = 0.7;
+let enabled = DEFAULT_SETTINGS.enabled;
+let threshold = DEFAULT_SETTINGS.threshold;
 let debounceId: number | undefined;
+
+const viewEnabled: Record<View, boolean> = {
+  inbox: DEFAULT_SETTINGS.viewInbox,
+  tabs: DEFAULT_SETTINGS.viewTabs,
+  search: DEFAULT_SETTINGS.viewSearch,
+  other: DEFAULT_SETTINGS.viewOther,
+};
 
 const candidates = new Map<string, Entry>();
 
@@ -27,16 +45,28 @@ function schedule(): void {
   }, DEBOUNCE_MS);
 }
 
-function isInboxView(): boolean {
-  return location.hash === '' || location.hash === '#inbox' || location.hash.startsWith('#inbox?');
-}
-
 function visibleMain(): HTMLElement | undefined {
   for (const main of document.querySelectorAll<HTMLElement>('div[role=main]')) {
     const visible = window.getComputedStyle(main).display !== 'none' && main.offsetParent !== null;
     if (visible && main.querySelector('tr.zA')) return main;
   }
   return undefined;
+}
+
+function visibleList(): HTMLElement | undefined {
+  const main = visibleMain();
+  if (!main) return undefined;
+  for (const list of main.querySelectorAll<HTMLElement>('.Cp')) {
+    if (!list.querySelector('tr.zA')) continue;
+    if (list.offsetParent === null && list.getClientRects().length === 0) continue;
+    return list;
+  }
+  return undefined;
+}
+
+function currentView(): View | null {
+  if (!visibleMain()) return null;
+  return viewFromHash(location.hash);
 }
 
 function extractState(row: HTMLTableRowElement): EmailState | undefined {
@@ -77,19 +107,21 @@ function pendingEntries(): Entry[] {
 }
 
 async function sync(): Promise<void> {
-  if (!enabled || !isInboxView()) {
+  const view = currentView();
+  if (!enabled || view === null || !viewEnabled[view]) {
     removeSection();
     candidates.clear();
     return;
   }
-  const main = visibleMain();
-  if (!main) {
+  const list = visibleList();
+  if (!list) {
     removeSection();
+    candidates.clear();
     return;
   }
   const seen = new Set<string>();
   const next = new Map<string, Entry>();
-  for (const el of main.querySelectorAll<HTMLTableRowElement>('tr.zA.zE')) {
+  for (const el of list.querySelectorAll<HTMLTableRowElement>('tr.zA.zE')) {
     const state = extractState(el);
     if (!state) continue;
     const key = threadKey(state);
@@ -104,13 +136,7 @@ async function sync(): Promise<void> {
   candidates.clear();
   for (const [key, entry] of next.entries()) candidates.set(key, entry);
 
-  const first = main.querySelector<HTMLElement>('.Cp');
-  if (!first || !main.contains(first)) {
-    removeSection();
-    return;
-  }
-  sectionParent = first.parentElement;
-  ensureSection();
+  ensureSection(list);
   await dispatchPending();
   render();
 }
@@ -120,18 +146,23 @@ function removeSection(): void {
   section = null;
 }
 
-function ensureSection(): void {
-  const existing = sectionParent?.querySelector<HTMLElement>('div#gc-critical');
-  if (existing && existing.parentElement === sectionParent) {
-    section = existing;
+function ensureSection(list: HTMLElement): void {
+  const parent = list.parentElement;
+  if (!parent) {
+    removeSection();
     return;
   }
-  section?.remove();
-  const root = document.createElement('div');
-  root.className = 'gc-root';
-  root.id = 'gc-critical';
-  section = root;
-  sectionParent?.insertBefore(root, sectionParent.firstElementChild);
+  if (section !== null && !section.isConnected) section = null;
+  if (section !== null && section.parentElement === parent && section.nextElementSibling === list) {
+    return;
+  }
+  if (section === null) {
+    const root = document.createElement('div');
+    root.className = 'gc-root';
+    root.id = 'gc-critical';
+    section = root;
+  }
+  parent.insertBefore(section, list);
 }
 
 async function dispatchPending(): Promise<void> {
@@ -249,7 +280,7 @@ function render(): void {
     itemEl.appendChild(snippetEl);
 
     itemEl.addEventListener('click', () => {
-      location.hash = `#inbox/${item.state.legacyThreadId}`;
+      location.hash = threadHash(location.hash, item.state.legacyThreadId);
     });
     section.appendChild(itemEl);
   }
@@ -259,6 +290,11 @@ async function bootstrap(): Promise<void> {
   const stored = await chrome.storage.local.get(STORAGE_KEYS);
   if (typeof stored.enabled === 'boolean') enabled = stored.enabled;
   if (typeof stored.threshold === 'number') threshold = stored.threshold;
+  for (const view of VIEWS) {
+    const key = VIEW_SETTING_KEYS[view];
+    const storedValue = stored[key];
+    if (typeof storedValue === 'boolean') viewEnabled[view] = storedValue;
+  }
   const observer = new MutationObserver(schedule);
   observer.observe(document.documentElement, { childList: true, subtree: true });
   window.addEventListener('hashchange', schedule);
@@ -267,6 +303,7 @@ async function bootstrap(): Promise<void> {
       enabled = changes.enabled.newValue !== false;
       if (!enabled) {
         removeSection();
+        candidates.clear();
         return;
       }
       schedule();
@@ -275,6 +312,16 @@ async function bootstrap(): Promise<void> {
     if (changes.threshold && typeof changes.threshold.newValue === 'number') {
       threshold = changes.threshold.newValue;
       render();
+      return;
+    }
+    for (const view of VIEWS) {
+      const key = VIEW_SETTING_KEYS[view];
+      const change = changes[key];
+      if (!change) continue;
+      viewEnabled[view] =
+        typeof change.newValue === 'boolean' ? change.newValue : DEFAULT_SETTINGS[key];
+      schedule();
+      return;
     }
   });
   void sync();
