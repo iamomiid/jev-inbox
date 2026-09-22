@@ -54,7 +54,6 @@ export async function classifyEmail(
         ],
       },
     },
-    providerOptions: { gateway: { zeroDataRetention: true } },
   });
   const critical = result.answers.critical;
   const category = result.answers.category;
