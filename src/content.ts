@@ -54,6 +54,8 @@ const CACHE_PREFIX = 'crit:';
 
 let bar: HTMLElement | null = null;
 let observer: MutationObserver | null = null;
+let classObserver: MutationObserver | null = null;
+let observedList: HTMLElement | null = null;
 let inFlight = false;
 let halted = false;
 let errorMessage: string | null = null;
@@ -237,6 +239,22 @@ function touchesList(records: MutationRecord[]): boolean {
   return false;
 }
 
+function observeRowClasses(list: HTMLElement | null): void {
+  if (classObserver === null) {
+    classObserver = new MutationObserver((records) => {
+      if (!records.some((record) => record.target instanceof HTMLTableRowElement)) return;
+      applyOrderNow();
+      schedule();
+    });
+  }
+  if (observedList === list) return;
+  classObserver.disconnect();
+  observedList = list;
+  if (list !== null) {
+    classObserver.observe(list, { attributes: true, attributeFilter: ['class'], subtree: true });
+  }
+}
+
 function rowThreadId(row: HTMLTableRowElement): string | null {
   const carrier = row.querySelector('[data-thread-id]');
   return carrier?.getAttribute('data-thread-id') ?? null;
@@ -405,6 +423,7 @@ function restoreList(list: HTMLElement | null): void {
   applyOrder(tracked.map((item) => item.row));
   for (const slot of list.querySelectorAll('span.gc-chips')) slot.remove();
   observer?.takeRecords();
+  classObserver?.takeRecords();
 }
 
 function runOrderPass(): void {
@@ -424,10 +443,12 @@ function runOrderPass(): void {
     removeBar();
     candidates.clear();
     currentList = null;
+    observeRowClasses(null);
     return;
   }
   recordOrder(list);
   currentList = list;
+  observeRowClasses(list);
   ensureBar(list);
   render();
 }
@@ -470,6 +491,20 @@ function removeBar(): void {
   bar = null;
   clearRetry();
   observer?.takeRecords();
+  classObserver?.takeRecords();
+}
+
+function rowInset(list: HTMLElement): number {
+  const cell = list.querySelector('tr.zA td');
+  if (cell === null) return 0;
+  const listLeft = list.getBoundingClientRect().left;
+  const content = cell.firstElementChild;
+  if (content !== null && content.getBoundingClientRect().width > 0) {
+    return Math.max(0, Math.round(content.getBoundingClientRect().left - listLeft));
+  }
+  const padding = Number.parseFloat(window.getComputedStyle(cell).paddingLeft);
+  const box = cell.getBoundingClientRect().left - listLeft;
+  return Math.max(0, Math.round(box + (Number.isNaN(padding) ? 0 : padding)));
 }
 
 function ensureBar(list: HTMLElement): void {
@@ -489,7 +524,9 @@ function ensureBar(list: HTMLElement): void {
     bar = root;
   }
   parent.insertBefore(bar, list);
+  bar.style.paddingLeft = `${rowInset(list)}px`;
   observer?.takeRecords();
+  classObserver?.takeRecords();
 }
 
 async function dispatchPending(): Promise<void> {
@@ -642,6 +679,15 @@ function chipSignature(classification: Classification | undefined, failureCount:
   return signature;
 }
 
+function chipHasContent(classification: Classification | undefined): boolean {
+  if (classification === undefined) return true;
+  if (isCriticalClassification(classification)) return true;
+  return labels.some((label) => {
+    const probability = classification.labels[label.id];
+    return probability !== undefined && probability >= threshold;
+  });
+}
+
 function renderChips(): void {
   const list = currentList;
   if (list === null) return;
@@ -649,10 +695,14 @@ function renderChips(): void {
   for (const row of list.querySelectorAll<HTMLTableRowElement>('tr.zA.zE')) {
     const key = classifiableUnreadKey(row);
     if (key === null) continue;
-    const slot = chipSlot(row);
-    if (slot === null) continue;
     const classification = classifications.get(key);
     const failureCount = failures.get(key)?.failureCount ?? 0;
+    if (!chipHasContent(classification)) {
+      row.querySelector('span.gc-chips')?.remove();
+      continue;
+    }
+    const slot = chipSlot(row);
+    if (slot === null) continue;
     const signature = chipSignature(classification, failureCount);
     if (slot.dataset.gcSig === signature) continue;
     slot.dataset.gcSig = signature;
@@ -694,6 +744,7 @@ function render(): void {
   renderChips();
   applyRowOrder();
   observer?.takeRecords();
+  classObserver?.takeRecords();
 }
 
 async function bootstrap(): Promise<void> {
@@ -718,8 +769,10 @@ async function bootstrap(): Promise<void> {
     if (isClassification(value)) classifications.set(cacheKey, value);
   }
   observer = new MutationObserver((records) => {
-    if (records.every(isOwnRecord)) return;
-    if (touchesList(records)) applyOrderNow();
+    const foreign = records.filter((record) => !isOwnRecord(record));
+    if (foreign.length === 0) return;
+    if (!touchesList(foreign)) return;
+    applyOrderNow();
     schedule();
   });
   observer.observe(document.documentElement, { childList: true, subtree: true });

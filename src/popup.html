@@ -300,6 +300,49 @@
       .key-input input {
         padding-right: 34px;
       }
+      .key-saved {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .key-saved-text {
+        color: var(--muted);
+      }
+      .key-saved-actions {
+        display: flex;
+        gap: 10px;
+      }
+      .key-edit {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .key-edit-foot {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .link-button {
+        padding: 0;
+        border: 0;
+        background: none;
+        color: var(--accent);
+        font-size: 12px;
+        cursor: pointer;
+      }
+      .link-button:hover {
+        background: none;
+        text-decoration: underline;
+      }
+      .link-button.danger,
+      .link-button.confirm {
+        color: var(--danger);
+      }
+      .link-button.confirm {
+        font-weight: 600;
+      }
       .eye {
         position: absolute;
         top: 2px;
@@ -479,9 +522,11 @@
 
     <div id="privacyNotice" class="card notice" hidden>
       <p>
-        Jev Inbox sends the sender, subject, a short snippet and date of unread emails on screen to
-        Jev (through Vercel AI Gateway or TypeSafe, depending on your key) to classify them. Email
-        bodies are never sent. Results are cached in this browser.
+        Jev Inbox sends the sender, subject, a short snippet and date of unread emails in the list
+        currently loaded to Jev (through Vercel AI Gateway or TypeSafe, depending on your key) to
+        classify them. Your label names and descriptions are sent with each classification as
+        criteria, so do not put sensitive information in them. Email bodies are never sent. Results
+        are cached in this browser.
       </p>
       <div class="notice-actions">
         <button id="gotIt" class="primary" type="button">Got it</button>
@@ -505,114 +550,151 @@
       </div>
       <div id="apiKeyRow" class="field">
         <label for="apiKey">AI Gateway key</label>
-        <div class="key-input">
-          <input
-            id="apiKey"
-            type="password"
-            autocomplete="off"
-            spellcheck="false"
-            placeholder="AI Gateway API key"
-          />
-          <button id="apiKeyEye" class="eye" type="button" aria-pressed="false" aria-label="Show key">
-            <svg
-              class="icon-eye"
-              viewBox="0 0 24 24"
-              width="16"
-              height="16"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.8"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6-10-6-10-6Z" />
-              <circle cx="12" cy="12" r="3" />
-            </svg>
-            <svg
-              class="icon-eye-off"
-              viewBox="0 0 24 24"
-              width="16"
-              height="16"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.8"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6-10-6-10-6Z" />
-              <circle cx="12" cy="12" r="3" />
-              <path d="M4 20 20 4" />
-            </svg>
-          </button>
+        <div id="apiKeySaved" class="key-saved" hidden>
+          <span id="apiKeySavedText" class="key-saved-text"></span>
+          <span class="key-saved-actions">
+            <button id="apiKeyReplace" class="link-button" type="button">Replace</button>
+            <button id="apiKeyRemove" class="link-button danger" type="button">Remove</button>
+          </span>
         </div>
-        <a
-          class="hint-link"
-          href="https://vercel.com/docs/ai-gateway"
-          target="_blank"
-          rel="noreferrer"
-          >Where do I get a key?</a
-        >
+        <div id="apiKeyEdit" class="key-edit">
+          <div class="key-input">
+            <input
+              id="apiKey"
+              type="password"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="AI Gateway API key"
+            />
+            <button
+              id="apiKeyEye"
+              class="eye"
+              type="button"
+              aria-pressed="false"
+              aria-label="Show key"
+            >
+              <svg
+                class="icon-eye"
+                viewBox="0 0 24 24"
+                width="16"
+                height="16"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6-10-6-10-6Z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+              <svg
+                class="icon-eye-off"
+                viewBox="0 0 24 24"
+                width="16"
+                height="16"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6-10-6-10-6Z" />
+                <circle cx="12" cy="12" r="3" />
+                <path d="M4 20 20 4" />
+              </svg>
+            </button>
+          </div>
+          <div class="key-edit-foot">
+            <a
+              class="hint-link"
+              href="https://vercel.com/docs/ai-gateway"
+              target="_blank"
+              rel="noreferrer"
+              >Where do I get a key?</a
+            >
+            <button id="apiKeyCancel" class="link-button" type="button" hidden>Cancel</button>
+          </div>
+        </div>
       </div>
       <div id="typesafeApiKeyRow" class="field">
         <label for="typesafeApiKey">TypeSafe key</label>
-        <div class="key-input">
-          <input
-            id="typesafeApiKey"
-            type="password"
-            autocomplete="off"
-            spellcheck="false"
-            placeholder="TypeSafe API key"
-          />
-          <button
-            id="typesafeApiKeyEye"
-            class="eye"
-            type="button"
-            aria-pressed="false"
-            aria-label="Show key"
-          >
-            <svg
-              class="icon-eye"
-              viewBox="0 0 24 24"
-              width="16"
-              height="16"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.8"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6-10-6-10-6Z" />
-              <circle cx="12" cy="12" r="3" />
-            </svg>
-            <svg
-              class="icon-eye-off"
-              viewBox="0 0 24 24"
-              width="16"
-              height="16"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.8"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6-10-6-10-6Z" />
-              <circle cx="12" cy="12" r="3" />
-              <path d="M4 20 20 4" />
-            </svg>
-          </button>
+        <div id="typesafeApiKeySaved" class="key-saved" hidden>
+          <span id="typesafeApiKeySavedText" class="key-saved-text"></span>
+          <span class="key-saved-actions">
+            <button id="typesafeApiKeyReplace" class="link-button" type="button">Replace</button>
+            <button id="typesafeApiKeyRemove" class="link-button danger" type="button">
+              Remove
+            </button>
+          </span>
         </div>
-        <a class="hint-link" href="https://docs.typesafe.ai" target="_blank" rel="noreferrer"
-          >Where do I get a key?</a
-        >
+        <div id="typesafeApiKeyEdit" class="key-edit">
+          <div class="key-input">
+            <input
+              id="typesafeApiKey"
+              type="password"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="TypeSafe API key"
+            />
+            <button
+              id="typesafeApiKeyEye"
+              class="eye"
+              type="button"
+              aria-pressed="false"
+              aria-label="Show key"
+            >
+              <svg
+                class="icon-eye"
+                viewBox="0 0 24 24"
+                width="16"
+                height="16"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6-10-6-10-6Z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+              <svg
+                class="icon-eye-off"
+                viewBox="0 0 24 24"
+                width="16"
+                height="16"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6-10-6-10-6Z" />
+                <circle cx="12" cy="12" r="3" />
+                <path d="M4 20 20 4" />
+              </svg>
+            </button>
+          </div>
+          <div class="key-edit-foot">
+            <a class="hint-link" href="https://docs.typesafe.ai" target="_blank" rel="noreferrer"
+              >Where do I get a key?</a
+            >
+            <button id="typesafeApiKeyCancel" class="link-button" type="button" hidden>
+              Cancel
+            </button>
+          </div>
+        </div>
       </div>
       <div class="test-row">
         <button id="testBtn" type="button">Test connection</button>
         <span id="testResult" class="test-result"></span>
       </div>
+      <p id="testHint" class="hint">
+        Accept the notice above before testing the key.
+      </p>
     </section>
 
     <section class="section">
@@ -620,6 +702,10 @@
         <h2>Labels</h2>
         <span id="labelCount" class="count"></span>
       </div>
+      <p class="hint">
+        Label names and descriptions are sent to the provider with each email as criteria. Do not
+        put sensitive information in them.
+      </p>
       <p id="labelsEmpty" class="empty">
         Labels let Jev tag unread email with your own categories. Describe what belongs under each
         one, for example Visa: residence permits, IND letters, immigration appointments.

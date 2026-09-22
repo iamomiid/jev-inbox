@@ -19,7 +19,9 @@ export function isProvider(value: unknown): value is Provider {
 
 export type Settings = {
   apiKey: string;
+  apiKeyHint: string;
   typesafeApiKey: string;
+  typesafeApiKeyHint: string;
   provider: Provider;
   enabled: boolean;
   threshold: number;
@@ -28,7 +30,9 @@ export type Settings = {
 
 export const DEFAULT_SETTINGS: Settings = {
   apiKey: '',
+  apiKeyHint: '',
   typesafeApiKey: '',
+  typesafeApiKeyHint: '',
   provider: 'gateway',
   enabled: true,
   threshold: 0.7,
@@ -39,9 +43,9 @@ export const DEFAULT_SETTINGS: Settings = {
   viewOther: false,
 };
 
-export const SETTING_KEYS = [
-  'apiKey',
-  'typesafeApiKey',
+export const POPUP_SETTING_KEYS = [
+  'apiKeyHint',
+  'typesafeApiKeyHint',
   'provider',
   'enabled',
   'threshold',
@@ -50,8 +54,8 @@ export const SETTING_KEYS = [
   ...VIEWS.map((view) => VIEW_SETTING_KEYS[view]),
 ] as const;
 
-export const CONTENT_SETTING_KEYS = SETTING_KEYS.filter(
-  (key) => key !== 'apiKey' && key !== 'typesafeApiKey'
+export const CONTENT_SETTING_KEYS = POPUP_SETTING_KEYS.filter(
+  (key) => key !== 'apiKeyHint' && key !== 'typesafeApiKeyHint'
 );
 
 export type LabelConfig = { id: string; name: string; description: string };
@@ -93,7 +97,9 @@ export type ClassifyResult =
 
 export type TestMessage = { type: 'test' };
 
-export type TestResult = { ok: true } | { ok: false; message: string };
+export type TestResult =
+  | { ok: true }
+  | { ok: false; message: string; error?: 'needs_ack' };
 
 export function labelsHash(labels: LabelConfig[]): string {
   let h = 5381;

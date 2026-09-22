@@ -1,7 +1,7 @@
 import {
   DEFAULT_SETTINGS,
   MAX_LABELS,
-  SETTING_KEYS,
+  POPUP_SETTING_KEYS,
   VIEWS,
   VIEW_SETTING_KEYS,
   isLabelConfig,
@@ -22,13 +22,51 @@ const providerInputs: Record<Provider, HTMLInputElement> = {
   gateway: document.getElementById('providerGateway') as HTMLInputElement,
   typesafe: document.getElementById('providerTypesafe') as HTMLInputElement,
 };
-const apiKey = document.getElementById('apiKey') as HTMLInputElement;
-const typesafeApiKey = document.getElementById('typesafeApiKey') as HTMLInputElement;
-const apiKeyEye = document.getElementById('apiKeyEye') as HTMLButtonElement;
-const typesafeApiKeyEye = document.getElementById('typesafeApiKeyEye') as HTMLButtonElement;
+
+type KeyField = {
+  keyName: 'apiKey' | 'typesafeApiKey';
+  hintName: 'apiKeyHint' | 'typesafeApiKeyHint';
+  input: HTMLInputElement;
+  eye: HTMLButtonElement;
+  saved: HTMLDivElement;
+  savedText: HTMLSpanElement;
+  edit: HTMLDivElement;
+  cancel: HTMLButtonElement;
+  replace: HTMLButtonElement;
+  remove: HTMLButtonElement;
+};
+
+const keyFields: Record<Provider, KeyField> = {
+  gateway: {
+    keyName: 'apiKey',
+    hintName: 'apiKeyHint',
+    input: document.getElementById('apiKey') as HTMLInputElement,
+    eye: document.getElementById('apiKeyEye') as HTMLButtonElement,
+    saved: document.getElementById('apiKeySaved') as HTMLDivElement,
+    savedText: document.getElementById('apiKeySavedText') as HTMLSpanElement,
+    edit: document.getElementById('apiKeyEdit') as HTMLDivElement,
+    cancel: document.getElementById('apiKeyCancel') as HTMLButtonElement,
+    replace: document.getElementById('apiKeyReplace') as HTMLButtonElement,
+    remove: document.getElementById('apiKeyRemove') as HTMLButtonElement,
+  },
+  typesafe: {
+    keyName: 'typesafeApiKey',
+    hintName: 'typesafeApiKeyHint',
+    input: document.getElementById('typesafeApiKey') as HTMLInputElement,
+    eye: document.getElementById('typesafeApiKeyEye') as HTMLButtonElement,
+    saved: document.getElementById('typesafeApiKeySaved') as HTMLDivElement,
+    savedText: document.getElementById('typesafeApiKeySavedText') as HTMLSpanElement,
+    edit: document.getElementById('typesafeApiKeyEdit') as HTMLDivElement,
+    cancel: document.getElementById('typesafeApiKeyCancel') as HTMLButtonElement,
+    replace: document.getElementById('typesafeApiKeyReplace') as HTMLButtonElement,
+    remove: document.getElementById('typesafeApiKeyRemove') as HTMLButtonElement,
+  },
+};
+
 const apiKeyRow = document.getElementById('apiKeyRow') as HTMLDivElement;
 const typesafeApiKeyRow = document.getElementById('typesafeApiKeyRow') as HTMLDivElement;
 const testBtn = document.getElementById('testBtn') as HTMLButtonElement;
+const testHint = document.getElementById('testHint') as HTMLSpanElement;
 const testResult = document.getElementById('testResult') as HTMLSpanElement;
 const enabled = document.getElementById('enabled') as HTMLInputElement;
 const statusLine = document.getElementById('statusLine') as HTMLParagraphElement;
@@ -52,7 +90,10 @@ const viewInputs: Record<string, HTMLInputElement> = {
   viewOther: document.getElementById('viewOther') as HTMLInputElement,
 };
 
+const keyHints: Record<KeyField['keyName'], string> = { apiKey: '', typesafeApiKey: '' };
+
 let draft: LabelConfig[] = [];
+let acknowledged = false;
 let savedTimer: number | undefined;
 const confirmTimers = new WeakMap<HTMLButtonElement, number>();
 
@@ -74,36 +115,85 @@ function updateKeyRows(): void {
 }
 
 function updateStatus(): void {
-  const key = providerInputs.typesafe.checked ? typesafeApiKey.value : apiKey.value;
+  const hint = keyHints[providerInputs.typesafe.checked ? 'typesafeApiKey' : 'apiKey'];
   if (!enabled.checked) {
     statusLine.textContent = 'Paused';
-  } else if (key.length === 0) {
+  } else if (hint.length === 0) {
     statusLine.textContent = 'Add a key to start';
   } else {
     statusLine.textContent = 'Active on this Gmail tab';
   }
 }
 
-function armConfirm(button: HTMLButtonElement, action: () => void, confirmLabel: string): void {
+function updateTestRow(): void {
+  testBtn.disabled = !acknowledged;
+  testHint.hidden = acknowledged;
+}
+
+function showSavedKey(field: KeyField, hint: string): void {
+  keyHints[field.keyName] = hint;
+  field.saved.hidden = hint.length === 0;
+  field.savedText.textContent = hint.length === 0 ? '' : `Key saved, ends in ...${hint}`;
+  field.edit.hidden = hint.length > 0;
+  field.cancel.hidden = true;
+  field.input.value = '';
+}
+
+function revealKeyInput(field: KeyField): void {
+  field.saved.hidden = true;
+  field.edit.hidden = false;
+  field.cancel.hidden = keyHints[field.keyName].length === 0;
+  field.input.value = '';
+  field.input.focus();
+}
+
+function saveKey(field: KeyField): void {
+  const value = field.input.value.trim();
+  if (value.length === 0) return;
+  const hint = value.slice(-4);
+  void chrome.storage.local
+    .set({ [field.keyName]: value, [field.hintName]: hint })
+    .then(() => {
+      showSavedKey(field, hint);
+      updateStatus();
+      showSaved();
+    });
+}
+
+function removeKey(field: KeyField): void {
+  void chrome.storage.local.remove([field.keyName, field.hintName]).then(() => {
+    showSavedKey(field, '');
+    updateStatus();
+    showSaved('Removed');
+  });
+}
+
+function armConfirm(
+  button: HTMLButtonElement,
+  action: () => void,
+  confirmLabel: string,
+  confirmText?: string
+): void {
   const originalLabel = button.getAttribute('aria-label');
+  const originalText = button.textContent;
+  const restore = (): void => {
+    const timer = confirmTimers.get(button);
+    if (timer !== undefined) window.clearTimeout(timer);
+    confirmTimers.delete(button);
+    button.classList.remove('confirm');
+    if (originalLabel !== null) button.setAttribute('aria-label', originalLabel);
+    if (confirmText !== undefined) button.textContent = originalText;
+  };
   button.addEventListener('click', () => {
     if (button.classList.contains('confirm')) {
-      const timer = confirmTimers.get(button);
-      if (timer !== undefined) window.clearTimeout(timer);
-      confirmTimers.delete(button);
-      button.classList.remove('confirm');
-      if (originalLabel !== null) button.setAttribute('aria-label', originalLabel);
+      restore();
       action();
       return;
     }
     button.classList.add('confirm');
     button.setAttribute('aria-label', confirmLabel);
-    const timer = window.setTimeout(() => {
-      button.classList.remove('confirm');
-      confirmTimers.delete(button);
-      if (originalLabel !== null) button.setAttribute('aria-label', originalLabel);
-    }, CONFIRM_MS);
-    confirmTimers.set(button, timer);
+    if (confirmText !== undefined) button.textContent = confirmText;
+    confirmTimers.set(button, window.setTimeout(restore, CONFIRM_MS));
   });
 }
 
@@ -205,11 +295,6 @@ function wireEye(button: HTMLButtonElement, input: HTMLInputElement): void {
   });
 }
 
-function saveKey(input: HTMLInputElement): void {
-  void chrome.storage.local.set({ [input.id]: input.value }).then(() => showSaved());
-  updateStatus();
-}
-
 async function runTestConnection(): Promise<void> {
   testBtn.disabled = true;
   testBtn.textContent = 'Testing...';
@@ -228,8 +313,8 @@ async function runTestConnection(): Promise<void> {
     testResult.className = 'test-result error';
     testResult.textContent = 'Connection test failed.';
   } finally {
-    testBtn.disabled = false;
     testBtn.textContent = 'Test connection';
+    updateTestRow();
   }
 }
 
@@ -243,17 +328,22 @@ function clearCache(): void {
 }
 
 async function load(): Promise<void> {
-  const stored = await chrome.storage.local.get([...SETTING_KEYS]);
+  const stored = await chrome.storage.local.get([...POPUP_SETTING_KEYS]);
   const storedProvider = isProvider(stored.provider) ? stored.provider : DEFAULT_SETTINGS.provider;
   providerInputs[storedProvider].checked = true;
-  apiKey.value = typeof stored.apiKey === 'string' ? stored.apiKey : '';
-  typesafeApiKey.value = typeof stored.typesafeApiKey === 'string' ? stored.typesafeApiKey : '';
+  showSavedKey(keyFields.gateway, typeof stored.apiKeyHint === 'string' ? stored.apiKeyHint : '');
+  showSavedKey(
+    keyFields.typesafe,
+    typeof stored.typesafeApiKeyHint === 'string' ? stored.typesafeApiKeyHint : ''
+  );
   updateKeyRows();
   enabled.checked = stored.enabled !== false;
   const value = typeof stored.threshold === 'number' ? stored.threshold : DEFAULT_SETTINGS.threshold;
   threshold.value = String(value);
   thresholdValue.textContent = percent(value);
-  privacyNotice.hidden = stored.privacyAck === true;
+  acknowledged = stored.privacyAck === true;
+  privacyNotice.hidden = acknowledged;
+  updateTestRow();
   draft = Array.isArray(stored.labels) ? stored.labels.filter(isLabelConfig) : [];
   renderLabels();
   for (const view of VIEWS) {
@@ -274,19 +364,23 @@ for (const provider of ['gateway', 'typesafe'] as const) {
   });
 }
 
-wireEye(apiKeyEye, apiKey);
-wireEye(typesafeApiKeyEye, typesafeApiKey);
-
-for (const input of [apiKey, typesafeApiKey]) {
-  input.addEventListener('change', () => {
-    saveKey(input);
+for (const field of [keyFields.gateway, keyFields.typesafe]) {
+  wireEye(field.eye, field.input);
+  field.input.addEventListener('change', () => {
+    saveKey(field);
   });
-  input.addEventListener('keydown', (event) => {
+  field.input.addEventListener('keydown', (event) => {
     if (event.key !== 'Enter') return;
     event.preventDefault();
-    input.blur();
-    saveKey(input);
+    field.input.blur();
   });
+  field.replace.addEventListener('click', () => {
+    revealKeyInput(field);
+  });
+  field.cancel.addEventListener('click', () => {
+    showSavedKey(field, keyHints[field.keyName]);
+  });
+  armConfirm(field.remove, () => removeKey(field), 'Confirm remove key', 'Confirm');
 }
 
 enabled.addEventListener('change', () => {
@@ -320,7 +414,9 @@ testBtn.addEventListener('click', () => {
 });
 
 gotIt.addEventListener('click', () => {
+  acknowledged = true;
   privacyNotice.hidden = true;
+  updateTestRow();
   void chrome.storage.local.set({ privacyAck: true }).then(() => showSaved());
 });
 

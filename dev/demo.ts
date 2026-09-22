@@ -19,8 +19,13 @@ const store: DemoStore = {
   threshold: 0.7,
   privacyAck: acked,
   labels: [
-    { id: 'visa', name: 'Visa', description: 'Residence permits, IND letters, immigration appointments' },
+    {
+      id: 'visa',
+      name: 'Visa',
+      description: 'Residence permits, IND letters, immigration appointments',
+    },
     { id: 'money', name: 'Money', description: 'Invoices, payments, bank statements' },
+    { id: 'home', name: 'Home', description: 'Rent, utilities, landlord and building notices' },
   ] satisfies LabelConfig[],
   viewInbox: true,
   viewTabs: true,
@@ -28,29 +33,44 @@ const store: DemoStore = {
   viewOther: true,
 };
 
-const CRITICAL: Classification = {
-  criticalProbability: 0.95,
+const RESIDENCE: Classification = {
+  criticalProbability: 0.94,
   urgencyScore: 3,
-  labels: { visa: 0.9, money: 0.9 },
+  labels: { visa: 0.92, money: 0.05, home: 0.03 },
 };
-const LATER: Classification = {
-  criticalProbability: 0.6,
-  urgencyScore: 2,
-  labels: { visa: 0.82, money: 0.12 },
+const INVOICE: Classification = {
+  criticalProbability: 0.89,
+  urgencyScore: 3,
+  labels: { visa: 0.04, money: 0.94, home: 0.05 },
 };
-const CALM: Classification = {
-  criticalProbability: 0.18,
+const PASSPORT: Classification = {
+  criticalProbability: 0.87,
+  urgencyScore: 3,
+  labels: { visa: 0.95, money: 0.03, home: 0.04 },
+};
+const RENT: Classification = {
+  criticalProbability: 0.31,
+  urgencyScore: 1,
+  labels: { visa: 0.02, money: 0.11, home: 0.9 },
+};
+const LIBRARY: Classification = {
+  criticalProbability: 0.19,
+  urgencyScore: 1,
+  labels: { visa: 0.03, money: 0.04, home: 0.06 },
+};
+const NEWSLETTER: Classification = {
+  criticalProbability: 0.08,
   urgencyScore: 0,
-  labels: { visa: 0.08, money: 0.05 },
+  labels: { visa: 0.01, money: 0.02, home: 0.02 },
 };
 
 const canned: Record<string, Classification> = {
-  demothread000001: CRITICAL,
-  demothread000002: CALM,
-  demothread000003: CRITICAL,
-  demothread000005: LATER,
-  demothread000008: CALM,
-  demothread000009: CRITICAL,
+  demothread000001: RESIDENCE,
+  demothread000002: NEWSLETTER,
+  demothread000003: INVOICE,
+  demothread000005: LIBRARY,
+  demothread000008: RENT,
+  demothread000009: PASSPORT,
 };
 
 const listeners: unknown[] = [];

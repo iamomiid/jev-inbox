@@ -48,6 +48,13 @@ async function handle(message: unknown): Promise<ClassifyResult | TestResult> {
   const provider = isProvider(storedProvider) ? storedProvider : 'gateway';
   const key = provider === 'typesafe' ? typesafeApiKey : apiKey;
   if (test) {
+    if (privacyAck !== true) {
+      return {
+        ok: false,
+        message: 'Accept the first-run notice in the popup before testing.',
+        error: 'needs_ack',
+      } satisfies TestResult;
+    }
     if (typeof key !== 'string' || key.length === 0) {
       return { ok: false, message: 'No API key saved.' } satisfies TestResult;
     }

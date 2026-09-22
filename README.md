@@ -14,7 +14,7 @@ Rows are sent in batches of 20 to the service worker, which asks TypeSafe Jev fo
 - `urgency`: a score from not urgent to immediately urgent.
 - One boolean question per label, with your description as the criteria.
 
-Critical rows come first, sorted by urgency and then by critical probability, then the remaining unread rows, then read rows. A row counts as critical when its critical probability reaches the sensitivity you set. Results are cached in `chrome.storage.local` and reused across renders and tabs, and the cache is bounded to 5000 entries.
+Critical rows come first, sorted by urgency and then by critical probability, then the remaining unread rows, then read rows. A row counts as critical when its critical probability reaches the sensitivity you set. Results are cached in `chrome.storage.local` and reused across renders and tabs, and the cache is bounded to 5000 entries. Clearing the cache, editing a label, or switching providers sends the unread rows of the current list through classification again.
 
 ## Install from source
 
@@ -34,11 +34,11 @@ Jev Inbox classifies through Jev, reachable either way:
 - **Vercel AI Gateway**: create a key in the Vercel dashboard (`https://vercel.com/docs/ai-gateway`), pick "AI Gateway" in the popup, and paste the key.
 - **TypeSafe**: create a key at `https://docs.typesafe.ai`, pick "TypeSafe" in the popup, and paste the key.
 
-Keys stay in `chrome.storage.local`, are only read by the extension's service worker, and are sent only to the provider you selected. "Test connection" runs one tiny classification on a fixed dummy state and reports the result inline.
+Keys stay in `chrome.storage.local`, are only read by the extension's service worker, and are sent only to the provider you selected. The popup keeps only the last four characters of each key, so it can show that one is saved without reading it back; Replace and Remove are there when you want to change it. "Test connection" runs one tiny classification on a fixed dummy state and reports the result inline.
 
 ## Labels
 
-Labels are your own categories. Each label has a name, which becomes a chip, and a description, which becomes the question Jev answers. Good descriptions name the concrete things that belong under the label:
+Labels are your own categories. Each label has a name, which becomes a chip, and a description, which becomes the question Jev answers. Both the name and the description are sent to the provider with each row as that question's criteria, so do not put sensitive information in them. Good descriptions name the concrete things that belong under the label:
 
 - `Visa`: residence permits, IND letters, immigration appointments.
 - `Money`: invoices, payments, bank statements, anything with an amount due.
@@ -48,11 +48,11 @@ A label needs both a name and a description before it is saved, and the list is 
 
 ## Privacy
 
-Only row metadata leaves your browser: sender name, sender address, subject, the snippet Gmail shows, and the date, sent to the provider you chose under your own key. No email bodies, no attachments, no analytics, no servers of our own. See [PRIVACY.md](PRIVACY.md) for the full description, including what is stored locally and how to delete it.
+Only row metadata leaves your browser: sender name, sender address, subject, the snippet Gmail shows, and the date, sent to the provider you chose under your own key, together with your label names and descriptions as the criteria for the label questions. No email bodies, no attachments, no analytics, no servers of our own. See [PRIVACY.md](PRIVACY.md) for the full description, including what is stored locally and how to delete it.
 
 ## Limitations
 
-- Only the rows Gmail has on screen are classified. Scrolling further classifies more as they appear.
+- Only the unread rows in the Gmail list currently loaded are classified. Scrolling further classifies more as they appear.
 - It reorders and labels what Gmail already shows. It never marks, archives, deletes, or opens mail.
 - One tab at a time does the work. Multiple open Gmail tabs share the same cache but each reorders its own list.
 - Gmail's markup changes without notice. If Gmail renames the parts of the list, injection stops until the selectors are updated (`docs/gmail-dom.md`).

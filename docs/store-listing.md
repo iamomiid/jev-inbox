@@ -17,11 +17,11 @@ Jev Inbox reorders the message list Gmail already shows. Unread mail moves above
 - Your sensitivity: choose how confident a classification has to be before a row counts as critical.
 - Your provider: Vercel AI Gateway or TypeSafe, with your own key.
 
-Only the rows on screen are classified, only their sender, subject, snippet and date are sent, and results are cached in your browser. Email bodies and attachments are never read or sent. There is no account, no analytics, and no server of ours.
+Only the unread rows in the Gmail list currently loaded are classified, only their sender, subject, snippet and date are sent, and your label names and descriptions go with them as the criteria Jev answers. Results are cached in your browser. Email bodies and attachments are never read or sent. There is no account, no analytics, and no server of ours.
 
 ## Single purpose statement
 
-Jev Inbox sorts and labels the unread messages Gmail already shows on screen, and nothing else.
+Jev Inbox sorts and labels the unread messages Gmail already shows in the list currently loaded, and nothing else.
 
 ## Permission justifications
 
@@ -34,12 +34,12 @@ No other hosts are requested. The extension makes no request to any server of it
 
 ## Data use disclosure answers
 
-- What data is collected: message metadata from the Gmail list, specifically sender display name, sender address, subject, snippet and date of unread rows. Not the body, not attachments, not the user's contacts, not their browsing history.
-- How the data is used: sent to the AI provider the user selected, to classify each row as critical or not, how urgent it is, and which of the user's labels it belongs to. Results are shown in the Gmail list.
+- What data is collected: message metadata from the Gmail list, specifically sender display name, sender address, subject, snippet and date of unread rows, plus the user's own label names and descriptions, which are sent as the criteria for the label questions. Not the body, not attachments, not the user's contacts, not their browsing history.
+- How the data is used: sent to the AI provider the user selected, to classify each row as critical or not, how urgent it is, and which of the user's labels it belongs to, where each label name and description is the criteria for that label's answer. Results are shown in the Gmail list.
 - Is data sold to third parties: no.
 - Is data used or transferred for purposes unrelated to the item's single purpose: no.
 - Is data used or transferred to determine creditworthiness or for lending purposes: no.
 - Transfer to third parties: only to the AI provider the user selected (Vercel AI Gateway or TypeSafe), under the user's own key and account, and only for classification.
-- Authentication information: the provider API key the user pastes is stored locally in `chrome.storage.local` and sent only to that provider as an authorization header.
-- Personal communications: message metadata of unread rows is sent to the selected provider for classification. Message content is not read or sent.
-- Storage and deletion: settings, keys, labels and the classification cache stay in the browser. "Clear cache" deletes cached classifications, and removing the extension deletes all of it.
+- Authentication information: the provider API key the user pastes is stored locally in `chrome.storage.local` and sent only to that provider as an authorization header. The popup keeps only the last four characters of each key so it can show that a key is saved without reading it back.
+- Personal communications: message metadata of unread rows is sent to the selected provider for classification, together with the user's label names and descriptions as criteria. Message content is not read or sent.
+- Storage and deletion: settings, keys, labels and the classification cache stay in the browser. "Clear cache" deletes cached classifications, which sends the unread rows of the current list through classification again, and removing the extension deletes all of it.
