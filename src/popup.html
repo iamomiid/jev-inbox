@@ -57,6 +57,16 @@
       .toggle-row span {
         color: #202124;
       }
+      .label-row {
+        margin: 6px 0;
+      }
+      .label-row input {
+        margin: 2px 0;
+      }
+      .label-row button {
+        margin: 0;
+        padding: 2px 8px;
+      }
     </style>
   </head>
   <body>
@@ -85,6 +95,10 @@
     <input id="apiKey" type="password" autocomplete="off" />
     <label for="threshold">Show if critical probability &ge; <span id="thresholdValue"></span></label>
     <input id="threshold" type="range" min="0.5" max="0.95" step="0.05" />
+    <p class="row-label" style="margin-top: 12px">Labels</p>
+    <div id="labels"></div>
+    <button id="addLabel" type="button">Add label</button>
+    <button id="saveLabels" type="button">Save labels</button>
     <p class="row-label" style="margin-top: 12px">Cache holds past classifications.</p>
     <button id="clear">Clear cache</button>
     <span id="saved">Saved</span>

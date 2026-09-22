@@ -27,22 +27,9 @@ export const DEFAULT_SETTINGS: Settings = {
   viewOther: false,
 };
 
-export type Category =
-  | 'needs_reply'
-  | 'money_or_legal'
-  | 'deadline'
-  | 'security'
-  | 'fyi'
-  | 'promo';
+export type LabelConfig = { id: string; name: string; description: string };
 
-export const CATEGORY_LABELS: Record<Category, string> = {
-  needs_reply: 'Reply',
-  money_or_legal: 'Money',
-  deadline: 'Deadline',
-  security: 'Security',
-  fyi: 'FYI',
-  promo: 'Promo',
-};
+export const MAX_LABELS = 15;
 
 export type EmailState = {
   threadId: string;
@@ -57,23 +44,37 @@ export type EmailState = {
 
 export type Classification = {
   criticalProbability: number;
-  category: Category;
   urgencyScore: number;
+  labels: Record<string, number>;
 };
 
-export type ClassifyMessage = { type: 'classify', emails: EmailState[] };
+export type ClassifyError = { message: string; status?: number };
+
+export type ClassifyMessage = {
+  type: 'classify';
+  emails: EmailState[];
+  labels: LabelConfig[];
+};
 
 export type ClassifyResult =
   | {
       ok: true;
       results: Record<string, Classification>;
-      errorCount: number;
-      errorMessage: string | null;
+      errors: Record<string, ClassifyError>;
     }
   | { ok: false; error: 'missing_key' | 'failed' };
 
-export function threadKey(state: EmailState): string {
-  return `${state.threadId}|${state.lastMessageId}`;
+export function labelsHash(labels: LabelConfig[]): string {
+  let h = 5381;
+  for (const label of labels) {
+    const s = `${label.id}|${label.name}|${label.description}`;
+    for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0;
+  }
+  return h.toString(36);
+}
+
+export function threadKey(state: EmailState, version: string): string {
+  return `${state.threadId}|${state.lastMessageId}|${version}`;
 }
 
 export function isEmailState(value: unknown): value is EmailState {
@@ -91,21 +92,53 @@ export function isEmailState(value: unknown): value is EmailState {
   );
 }
 
+export function isLabelConfig(value: unknown): value is LabelConfig {
+  if (typeof value !== 'object' || value === null) return false;
+  const v = value as Record<string, unknown>;
+  return (
+    typeof v.id === 'string' &&
+    typeof v.name === 'string' &&
+    typeof v.description === 'string'
+  );
+}
+
 const THREAD_ID = /^[A-Za-z0-9]{16,}$/;
 
-export function viewFromHash(hash: string): View | null {
-  const parts: string[] = [];
-  for (const raw of hash.replace(/^#/, '').split('?')[0].split('/')) {
-    if (raw.length === 0) continue;
+const TWO_SEGMENT_LIST_HEADS: Record<string, true> = {
+  search: true,
+  'advanced-search': true,
+  label: true,
+  category: true,
+};
+
+function parseHash(hash: string): { raw: string[]; decoded: string[] } {
+  const raw = hash
+    .replace(/^#/, '')
+    .split('?')[0]
+    .split('/')
+    .filter((part) => part.length > 0);
+  const decoded = raw.map((part) => {
     try {
-      parts.push(decodeURIComponent(raw));
+      return decodeURIComponent(part);
     } catch {
-      parts.push(raw);
+      return part;
     }
-  }
-  if (parts.length === 0) return 'inbox';
-  if (THREAD_ID.test(parts[parts.length - 1])) return null;
-  const head = parts[0];
+  });
+  return { raw, decoded };
+}
+
+function threadIndex(parts: string[]): number {
+  const last = parts.length - 1;
+  if (last < 1 || !THREAD_ID.test(parts[last])) return -1;
+  if (TWO_SEGMENT_LIST_HEADS[parts[0]] === true) return parts.length >= 3 ? last : -1;
+  return last;
+}
+
+export function viewFromHash(hash: string): View | null {
+  const { decoded } = parseHash(hash);
+  if (decoded.length === 0) return 'inbox';
+  if (threadIndex(decoded) !== -1) return null;
+  const head = decoded[0];
   if (head === 'inbox') return 'inbox';
   if (head === 'category') return 'tabs';
   if (head === 'search' || head === 'advanced-search') return 'search';
@@ -113,8 +146,8 @@ export function viewFromHash(hash: string): View | null {
 }
 
 export function threadHash(hash: string, legacyThreadId: string): string {
-  const parts = hash.replace(/^#/, '').split('?')[0].split('/').filter((part) => part.length > 0);
-  const last = parts[parts.length - 1];
-  const list = last !== undefined && THREAD_ID.test(last) ? parts.slice(0, -1) : parts;
+  const { raw, decoded } = parseHash(hash);
+  const index = threadIndex(decoded);
+  const list = index === -1 ? raw : raw.slice(0, index);
   return list.length > 0 ? `#${list.join('/')}/${legacyThreadId}` : `#inbox/${legacyThreadId}`;
 }

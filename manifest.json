@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Gmail Critical",
   "version": "0.1.0",
-  "description": "A Critical section above the Gmail inbox list, classified by TypeSafe Jev.",
+  "description": "An Unread section above the Gmail message list, critical first, with label chips.",
   "permissions": ["storage"],
   "host_permissions": ["https://mail.google.com/*", "https://ai-gateway.vercel.sh/*"],
   "background": {

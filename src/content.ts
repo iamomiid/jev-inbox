@@ -1,14 +1,16 @@
 import {
-  CATEGORY_LABELS,
   DEFAULT_SETTINGS,
   VIEWS,
   VIEW_SETTING_KEYS,
+  isLabelConfig,
+  labelsHash,
   threadHash,
   threadKey,
   viewFromHash,
   type ClassifyResult,
   type Classification,
   type EmailState,
+  type LabelConfig,
   type View,
 } from './shared';
 
@@ -16,16 +18,31 @@ type Entry = {
   key: string;
   state: EmailState;
   classification?: Classification;
+  failureCount: number;
+  nextAttemptAt: number;
 };
 
 const DEBOUNCE_MS = 800;
-const STORAGE_KEYS = ['enabled', 'threshold', ...VIEWS.map((view) => VIEW_SETTING_KEYS[view])];
+const BATCH_SIZE = 20;
+const BASE_BACKOFF_MS = 60_000;
+const MAX_BACKOFF_MS = 600_000;
+const CHIP_COLORS = 8;
+const STORAGE_KEYS = [
+  'enabled',
+  'threshold',
+  'labels',
+  ...VIEWS.map((view) => VIEW_SETTING_KEYS[view]),
+];
 
 let section: HTMLElement | null = null;
 let inFlight = false;
+let halted = false;
 let errorMessage: string | null = null;
 let enabled = DEFAULT_SETTINGS.enabled;
 let threshold = DEFAULT_SETTINGS.threshold;
+let labels: LabelConfig[] = [];
+let labelsVersion = labelsHash([]);
+let lastSignature: string | null = null;
 let debounceId: number | undefined;
 
 const viewEnabled: Record<View, boolean> = {
@@ -38,7 +55,7 @@ const viewEnabled: Record<View, boolean> = {
 const candidates = new Map<string, Entry>();
 
 function schedule(): void {
-  if (debounceId !== undefined) clearTimeout(debounceId);
+  clearTimeout(debounceId);
   debounceId = window.setTimeout(() => {
     debounceId = undefined;
     void sync();
@@ -98,12 +115,41 @@ function extractState(row: HTMLTableRowElement): EmailState | undefined {
   };
 }
 
-function pendingEntries(): Entry[] {
+function dispatchableEntries(): Entry[] {
+  const now = Date.now();
   const out: Entry[] = [];
   for (const entry of candidates.values()) {
-    if (entry.classification === undefined) out.push(entry);
+    if (entry.classification === undefined && entry.nextAttemptAt <= now) out.push(entry);
   }
   return out;
+}
+
+function pendingCount(): number {
+  let count = 0;
+  for (const entry of candidates.values()) {
+    if (entry.classification === undefined) count += 1;
+  }
+  return count;
+}
+
+function isCritical(entry: Entry): boolean {
+  const classification = entry.classification;
+  return classification !== undefined && classification.criticalProbability >= threshold;
+}
+
+function recordFailure(entry: Entry): void {
+  entry.failureCount += 1;
+  entry.nextAttemptAt =
+    Date.now() + Math.min(BASE_BACKOFF_MS * 2 ** (entry.failureCount - 1), MAX_BACKOFF_MS);
+}
+
+function isOwnRecord(record: MutationRecord): boolean {
+  if (section === null) return false;
+  if (record.target === section || section.contains(record.target)) return true;
+  for (const node of [...record.addedNodes, ...record.removedNodes]) {
+    if (node === section || section.contains(node)) return true;
+  }
+  return false;
 }
 
 async function sync(): Promise<void> {
@@ -124,8 +170,8 @@ async function sync(): Promise<void> {
   for (const el of list.querySelectorAll<HTMLTableRowElement>('tr.zA.zE')) {
     const state = extractState(el);
     if (!state) continue;
-    const key = threadKey(state);
-    const entry = candidates.get(key) ?? { key, state };
+    const key = threadKey(state, labelsVersion);
+    const entry = candidates.get(key) ?? { key, state, failureCount: 0, nextAttemptAt: 0 };
     entry.state = state;
     next.set(key, entry);
     seen.add(key);
@@ -137,6 +183,7 @@ async function sync(): Promise<void> {
   for (const [key, entry] of next.entries()) candidates.set(key, entry);
 
   ensureSection(list);
+  render();
   await dispatchPending();
   render();
 }
@@ -144,6 +191,7 @@ async function sync(): Promise<void> {
 function removeSection(): void {
   section?.remove();
   section = null;
+  lastSignature = null;
 }
 
 function ensureSection(list: HTMLElement): void {
@@ -159,32 +207,34 @@ function ensureSection(list: HTMLElement): void {
   if (section === null) {
     const root = document.createElement('div');
     root.className = 'gc-root';
-    root.id = 'gc-critical';
+    root.id = 'gc-unread';
     section = root;
   }
   parent.insertBefore(section, list);
 }
 
 async function dispatchPending(): Promise<void> {
-  if (inFlight) return;
-  if (pendingEntries().length === 0) return;
+  if (inFlight || halted) return;
+  if (dispatchableEntries().length === 0) return;
   inFlight = true;
   errorMessage = null;
   const attempted = new Set<string>();
   while (true) {
-    const batch = pendingEntries()
+    const batch = dispatchableEntries()
       .filter((entry) => !attempted.has(entry.key))
-      .slice(0, 20);
+      .slice(0, BATCH_SIZE);
     if (batch.length === 0) break;
     for (const entry of batch) attempted.add(entry.key);
     let response: ClassifyResult;
     try {
-      response = (await chrome.runtime.sendMessage({
+      response = await chrome.runtime.sendMessage({
         type: 'classify',
         emails: batch.map((entry) => entry.state),
-      })) as ClassifyResult;
+        labels,
+      });
     } catch {
       errorMessage = 'Classification request failed.';
+      for (const entry of batch) recordFailure(entry);
       break;
     }
     if (!response.ok) {
@@ -192,15 +242,34 @@ async function dispatchPending(): Promise<void> {
         response.error === 'missing_key'
           ? 'No API key saved. Open the extension popup and add it.'
           : 'Classification request failed.';
+      if (response.error === 'missing_key') halted = true;
+      for (const entry of batch) recordFailure(entry);
       break;
     }
+    let authFailure = false;
+    let rowFailure = false;
     for (const entry of batch) {
       const classification = response.results[entry.key];
-      if (classification !== undefined) entry.classification = classification;
+      if (classification !== undefined) {
+        entry.classification = classification;
+        entry.failureCount = 0;
+        entry.nextAttemptAt = 0;
+        continue;
+      }
+      rowFailure = true;
+      const failure = response.errors[entry.key];
+      recordFailure(entry);
+      if (failure !== undefined && (failure.status === 401 || failure.status === 403)) {
+        authFailure = true;
+      }
     }
-    if (response.errorCount > 0) {
-      errorMessage = response.errorMessage ?? 'Classification request failed.';
+    if (authFailure) {
+      halted = true;
+      errorMessage = 'Classification failed with 401/403. Check the API key in the popup.';
+    } else if (rowFailure) {
+      errorMessage = 'Classification request failed.';
     }
+    render();
   }
   inFlight = false;
 }
@@ -214,32 +283,106 @@ function compareEntries(a: Entry, b: Entry): number {
   return pb - pa;
 }
 
-function render(): void {
-  if (!section) return;
-  const threads: Entry[] = [];
-  for (const candidate of candidates.values()) {
-    const classification = candidate.classification;
-    if (classification !== undefined && classification.criticalProbability >= threshold) {
-      threads.push(candidate);
+function renderSignature(entries: Entry[]): string {
+  const parts = entries.map((entry) => {
+    const classification = entry.classification;
+    if (classification === undefined) return `${entry.key}?${entry.failureCount}`;
+    return `${entry.key}=${classification.criticalProbability},${classification.urgencyScore},${JSON.stringify(classification.labels)}`;
+  });
+  return [threshold, labelsVersion, inFlight, errorMessage ?? '', ...parts].join('|');
+}
+
+function itemElement(entry: Entry): HTMLElement {
+  const classification = entry.classification;
+  const itemEl = document.createElement('div');
+  itemEl.className = 'gc-item';
+
+  const top = document.createElement('div');
+  top.className = 'gc-top';
+  const from = document.createElement('span');
+  from.className = 'gc-from';
+  from.textContent = entry.state.fromName;
+  top.appendChild(from);
+
+  if (isCritical(entry)) {
+    const badge = document.createElement('span');
+    badge.className = 'gc-badge';
+    badge.textContent = 'Critical';
+    top.appendChild(badge);
+  }
+
+  if (classification === undefined) {
+    const marker = document.createElement('span');
+    marker.className = 'gc-pending';
+    marker.textContent = entry.failureCount > 0 ? 'retrying' : 'classifying';
+    top.appendChild(marker);
+  } else {
+    for (let index = 0; index < labels.length; index++) {
+      const label = labels[index];
+      const probability = classification.labels[label.id];
+      if (probability === undefined || probability < threshold) continue;
+      const chip = document.createElement('span');
+      chip.className = `gc-chip gc-chip-${index % CHIP_COLORS}`;
+      chip.textContent = label.name;
+      top.appendChild(chip);
     }
   }
-  threads.sort(compareEntries);
+
+  const date = document.createElement('span');
+  date.className = 'gc-date';
+  date.textContent = entry.state.date;
+  top.appendChild(date);
+  itemEl.appendChild(top);
+
+  const subject = document.createElement('div');
+  subject.className = 'gc-subject';
+  subject.textContent = entry.state.subject;
+  itemEl.appendChild(subject);
+
+  const snippet = document.createElement('div');
+  snippet.className = 'gc-snippet';
+  snippet.textContent = entry.state.snippet;
+  itemEl.appendChild(snippet);
+
+  itemEl.addEventListener('click', () => {
+    location.hash = threadHash(location.hash, entry.state.legacyThreadId);
+  });
+  return itemEl;
+}
+
+function render(): void {
+  if (section === null) return;
+  const entries = [...candidates.values()];
+  const critical: Entry[] = [];
+  const rest: Entry[] = [];
+  for (const entry of entries) {
+    if (isCritical(entry)) critical.push(entry);
+    else rest.push(entry);
+  }
+  critical.sort(compareEntries);
+
+  const signature = renderSignature(entries);
+  if (signature === lastSignature) return;
+  lastSignature = signature;
 
   section.textContent = '';
   const header = document.createElement('div');
   header.className = 'gc-header';
-  header.innerHTML = '<span class="gc-title">Critical</span>';
+  const title = document.createElement('span');
+  title.className = 'gc-title';
+  title.textContent = 'Unread';
+  header.appendChild(title);
   const countEl = document.createElement('span');
   countEl.className = 'gc-count';
-  countEl.textContent = String(threads.length);
+  countEl.textContent = String(entries.length);
   header.appendChild(countEl);
   section.appendChild(header);
 
-  const pending = pendingEntries();
-  if (inFlight && pending.length > 0) {
+  const pending = pendingCount();
+  if (inFlight && pending > 0) {
     const status = document.createElement('div');
     status.className = 'gc-status';
-    status.textContent = `classifying ${pending.length}...`;
+    status.textContent = `classifying ${pending}...`;
     section.appendChild(status);
   }
   if (errorMessage) {
@@ -249,70 +392,44 @@ function render(): void {
     section.appendChild(err);
   }
 
-  for (const item of threads) {
-    const itemEl = document.createElement('div');
-    itemEl.className = 'gc-item';
-
-    const top = document.createElement('div');
-    top.className = 'gc-top';
-    const from = document.createElement('span');
-    from.className = 'gc-from';
-    from.textContent = item.state.fromName;
-    top.appendChild(from);
-    const categoryEl = document.createElement('span');
-    categoryEl.className = 'gc-cat';
-    categoryEl.textContent = CATEGORY_LABELS[item.classification!.category];
-    top.appendChild(categoryEl);
-    const dateEl = document.createElement('span');
-    dateEl.className = 'gc-date';
-    dateEl.textContent = item.state.date;
-    top.appendChild(dateEl);
-    itemEl.appendChild(top);
-
-    const subjectEl = document.createElement('div');
-    subjectEl.className = 'gc-subject';
-    subjectEl.textContent = item.state.subject;
-    itemEl.appendChild(subjectEl);
-
-    const snippetEl = document.createElement('div');
-    snippetEl.className = 'gc-snippet';
-    snippetEl.textContent = item.state.snippet;
-    itemEl.appendChild(snippetEl);
-
-    itemEl.addEventListener('click', () => {
-      location.hash = threadHash(location.hash, item.state.legacyThreadId);
-    });
-    section.appendChild(itemEl);
-  }
+  for (const entry of critical) section.appendChild(itemElement(entry));
+  for (const entry of rest) section.appendChild(itemElement(entry));
 }
 
 async function bootstrap(): Promise<void> {
   const stored = await chrome.storage.local.get(STORAGE_KEYS);
   if (typeof stored.enabled === 'boolean') enabled = stored.enabled;
   if (typeof stored.threshold === 'number') threshold = stored.threshold;
+  if (Array.isArray(stored.labels)) labels = stored.labels.filter(isLabelConfig);
+  labelsVersion = labelsHash(labels);
   for (const view of VIEWS) {
     const key = VIEW_SETTING_KEYS[view];
     const storedValue = stored[key];
     if (typeof storedValue === 'boolean') viewEnabled[view] = storedValue;
   }
-  const observer = new MutationObserver(schedule);
+  const observer = new MutationObserver((records) => {
+    if (records.every(isOwnRecord)) return;
+    schedule();
+  });
   observer.observe(document.documentElement, { childList: true, subtree: true });
   window.addEventListener('hashchange', schedule);
   chrome.storage.onChanged.addListener((changes) => {
-    if (changes.enabled) {
-      enabled = changes.enabled.newValue !== false;
-      if (!enabled) {
-        removeSection();
-        candidates.clear();
-        return;
+    if (changes.apiKey) {
+      halted = false;
+      for (const entry of candidates.values()) {
+        entry.failureCount = 0;
+        entry.nextAttemptAt = 0;
       }
-      schedule();
-      return;
     }
+    if (changes.labels) {
+      const value = changes.labels.newValue;
+      labels = Array.isArray(value) ? value.filter(isLabelConfig) : [];
+      labelsVersion = labelsHash(labels);
+      candidates.clear();
+    }
+    if (changes.enabled) enabled = changes.enabled.newValue !== false;
     if (changes.threshold && typeof changes.threshold.newValue === 'number') {
       threshold = changes.threshold.newValue;
-      render();
-      return;
     }
     for (const view of VIEWS) {
       const key = VIEW_SETTING_KEYS[view];
@@ -320,9 +437,8 @@ async function bootstrap(): Promise<void> {
       if (!change) continue;
       viewEnabled[view] =
         typeof change.newValue === 'boolean' ? change.newValue : DEFAULT_SETTINGS[key];
-      schedule();
-      return;
     }
+    schedule();
   });
   void sync();
 }

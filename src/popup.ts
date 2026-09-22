@@ -1,4 +1,11 @@
-import { DEFAULT_SETTINGS, VIEWS, VIEW_SETTING_KEYS } from './shared';
+import {
+  DEFAULT_SETTINGS,
+  MAX_LABELS,
+  VIEWS,
+  VIEW_SETTING_KEYS,
+  isLabelConfig,
+  type LabelConfig,
+} from './shared';
 
 const apiKey = document.getElementById('apiKey') as HTMLInputElement;
 const enabled = document.getElementById('enabled') as HTMLInputElement;
@@ -6,6 +13,9 @@ const threshold = document.getElementById('threshold') as HTMLInputElement;
 const thresholdValue = document.getElementById('thresholdValue') as HTMLSpanElement;
 const clear = document.getElementById('clear') as HTMLButtonElement;
 const saved = document.getElementById('saved') as HTMLSpanElement;
+const labelsEl = document.getElementById('labels') as HTMLDivElement;
+const addLabel = document.getElementById('addLabel') as HTMLButtonElement;
+const saveLabels = document.getElementById('saveLabels') as HTMLButtonElement;
 
 const viewInputs: Record<string, HTMLInputElement> = {
   viewInbox: document.getElementById('viewInbox') as HTMLInputElement,
@@ -14,6 +24,8 @@ const viewInputs: Record<string, HTMLInputElement> = {
   viewOther: document.getElementById('viewOther') as HTMLInputElement,
 };
 
+let draft: LabelConfig[] = [];
+
 function showSaved(): void {
   saved.style.display = 'inline';
   setTimeout(() => {
@@ -21,11 +33,51 @@ function showSaved(): void {
   }, 1500);
 }
 
+function renderLabels(): void {
+  labelsEl.textContent = '';
+  addLabel.disabled = draft.length >= MAX_LABELS;
+  for (let index = 0; index < draft.length; index++) {
+    const item = draft[index];
+    const row = document.createElement('div');
+    row.className = 'label-row';
+
+    const name = document.createElement('input');
+    name.type = 'text';
+    name.placeholder = 'Name';
+    name.value = item.name;
+    name.addEventListener('input', () => {
+      item.name = name.value;
+    });
+
+    const description = document.createElement('input');
+    description.type = 'text';
+    description.placeholder = 'What belongs under it';
+    description.value = item.description;
+    description.addEventListener('input', () => {
+      item.description = description.value;
+    });
+
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.textContent = 'Remove';
+    remove.addEventListener('click', () => {
+      draft.splice(index, 1);
+      renderLabels();
+    });
+
+    row.appendChild(name);
+    row.appendChild(description);
+    row.appendChild(remove);
+    labelsEl.appendChild(row);
+  }
+}
+
 async function load(): Promise<void> {
   const stored = await chrome.storage.local.get([
     'apiKey',
     'enabled',
     'threshold',
+    'labels',
     ...VIEWS.map((view) => VIEW_SETTING_KEYS[view]),
   ]);
   apiKey.value = typeof stored.apiKey === 'string' ? stored.apiKey : '';
@@ -33,6 +85,8 @@ async function load(): Promise<void> {
   const value = typeof stored.threshold === 'number' ? stored.threshold : DEFAULT_SETTINGS.threshold;
   threshold.value = String(value);
   thresholdValue.textContent = String(value);
+  draft = Array.isArray(stored.labels) ? stored.labels.filter(isLabelConfig) : [];
+  renderLabels();
   for (const view of VIEWS) {
     const key = VIEW_SETTING_KEYS[view];
     const storedValue = stored[key];
@@ -60,6 +114,18 @@ for (const view of VIEWS) {
     void chrome.storage.local.set({ [key]: input.checked }).then(showSaved);
   });
 }
+addLabel.addEventListener('click', () => {
+  if (draft.length >= MAX_LABELS) return;
+  draft.push({ id: crypto.randomUUID(), name: '', description: '' });
+  renderLabels();
+});
+saveLabels.addEventListener('click', () => {
+  const savedLabels = draft
+    .map(({ id, name, description }) => ({ id, name: name.trim(), description: description.trim() }))
+    .filter((label) => label.name.length > 0 && label.description.length > 0)
+    .slice(0, MAX_LABELS);
+  void chrome.storage.local.set({ labels: savedLabels }).then(showSaved);
+});
 clear.addEventListener('click', () => {
   void (async () => {
     const all = await chrome.storage.local.get(null);
