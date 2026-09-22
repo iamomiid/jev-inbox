@@ -1,9 +1,10 @@
-import { classifyEmail } from './gateway';
+import { classifyEmail } from './jev';
 import {
+  cacheVersion,
   isClassification,
   isEmailState,
   isLabelConfig,
-  labelsHash,
+  isProvider,
   threadKey,
   type ClassifyError,
   type ClassifyMessage,
@@ -11,10 +12,13 @@ import {
   type Classification,
   type EmailState,
   type LabelConfig,
+  type Provider,
 } from './shared';
 
 const CACHE_PREFIX = 'crit:';
 const CONCURRENCY = 8;
+const CACHE_MAX = 5000;
+const CACHE_KEEP = 4000;
 
 const inflight = new Map<string, Promise<Classification>>();
 
@@ -31,12 +35,18 @@ async function handle(message: unknown): Promise<ClassifyResult> {
   if (request === undefined) return { ok: false, error: 'failed' } satisfies ClassifyResult;
   const { emails, labels } = request;
 
-  const { apiKey } = await chrome.storage.local.get('apiKey');
-  if (typeof apiKey !== 'string' || apiKey.length === 0) {
+  const { provider: storedProvider, apiKey, typesafeApiKey } = await chrome.storage.local.get([
+    'provider',
+    'apiKey',
+    'typesafeApiKey',
+  ]);
+  const provider = isProvider(storedProvider) ? storedProvider : 'gateway';
+  const key = provider === 'typesafe' ? typesafeApiKey : apiKey;
+  if (typeof key !== 'string' || key.length === 0) {
     return { ok: false, error: 'missing_key' } satisfies ClassifyResult;
   }
 
-  const version = labelsHash(labels);
+  const version = cacheVersion(labels, provider);
   const tasks = new Map<string, { email: EmailState; key: string; storeKey: string }>();
   for (const email of emails) {
     const key = threadKey(email, version);
@@ -59,7 +69,7 @@ async function handle(message: unknown): Promise<ClassifyResult> {
       const task = queue.shift();
       if (task === undefined) return;
       try {
-        results[task.key] = await classifyWithCache(task.storeKey, task.email, apiKey, labels);
+        results[task.key] = await classifyWithCache(task.storeKey, task.email, key, labels, provider);
       } catch (error) {
         const failure = toClassifyError(error);
         errors[task.key] = failure;
@@ -71,6 +81,7 @@ async function handle(message: unknown): Promise<ClassifyResult> {
     }
   });
   await Promise.all(workers);
+  if (fresh.length > 0) await pruneCache();
   return { ok: true, results, errors };
 }
 
@@ -78,11 +89,12 @@ function classifyWithCache(
   storeKey: string,
   email: EmailState,
   apiKey: string,
-  labels: LabelConfig[]
+  labels: LabelConfig[],
+  provider: Provider
 ): Promise<Classification> {
   const existing = inflight.get(storeKey);
   if (existing !== undefined) return existing;
-  const promise = resolveClassification(storeKey, email, apiKey, labels).finally(() => {
+  const promise = resolveClassification(storeKey, email, apiKey, labels, provider).finally(() => {
     inflight.delete(storeKey);
   });
   inflight.set(storeKey, promise);
@@ -93,14 +105,47 @@ async function resolveClassification(
   storeKey: string,
   email: EmailState,
   apiKey: string,
-  labels: LabelConfig[]
+  labels: LabelConfig[],
+  provider: Provider
 ): Promise<Classification> {
   const stored = await chrome.storage.local.get(storeKey);
   const hit = stored[storeKey];
   if (isClassification(hit)) return hit;
-  const classification = await classifyEmail(email, apiKey, labels);
-  await chrome.storage.local.set({ [storeKey]: classification });
+  const classification = await classifyEmail(email, apiKey, labels, provider);
+  try {
+    await chrome.storage.local.set({ [storeKey]: { ...classification, ts: Date.now() } });
+  } catch (error) {
+    console.error('cache write failed', error);
+  }
   return classification;
+}
+
+async function pruneCache(): Promise<void> {
+  if (typeof chrome.storage.local.getKeys !== 'function') return;
+  try {
+    const keys = (await chrome.storage.local.getKeys()).filter((key) =>
+      key.startsWith(CACHE_PREFIX)
+    );
+    if (keys.length <= CACHE_MAX) return;
+    const stored = await chrome.storage.local.get(keys);
+    const ranked = keys
+      .map((key) => {
+        const entry: unknown = stored[key];
+        const ts =
+          typeof entry === 'object' &&
+          entry !== null &&
+          'ts' in entry &&
+          typeof entry.ts === 'number'
+            ? entry.ts
+            : 0;
+        return { key, ts };
+      })
+      .sort((a, b) => a.ts - b.ts);
+    const excess = keys.length - CACHE_KEEP;
+    await chrome.storage.local.remove(ranked.slice(0, excess).map((item) => item.key));
+  } catch (error) {
+    console.error('cache prune failed', error);
+  }
 }
 
 function toClassifyError(error: unknown): ClassifyError {

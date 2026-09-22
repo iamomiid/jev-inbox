@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@ai-sdk/typesafe-ai": "^3.0.4",
     "@types/chrome": "^0.3.0",
     "ai": "^7.0.111",
     "esbuild": "^0.28.2",

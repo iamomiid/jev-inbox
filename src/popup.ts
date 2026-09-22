@@ -1,13 +1,19 @@
 import {
   DEFAULT_SETTINGS,
   MAX_LABELS,
+  SETTING_KEYS,
   VIEWS,
   VIEW_SETTING_KEYS,
   isLabelConfig,
+  isProvider,
   type LabelConfig,
 } from './shared';
 
+const provider = document.getElementById('provider') as HTMLSelectElement;
 const apiKey = document.getElementById('apiKey') as HTMLInputElement;
+const typesafeApiKey = document.getElementById('typesafeApiKey') as HTMLInputElement;
+const apiKeyRow = document.getElementById('apiKeyRow') as HTMLDivElement;
+const typesafeApiKeyRow = document.getElementById('typesafeApiKeyRow') as HTMLDivElement;
 const enabled = document.getElementById('enabled') as HTMLInputElement;
 const threshold = document.getElementById('threshold') as HTMLInputElement;
 const thresholdValue = document.getElementById('thresholdValue') as HTMLSpanElement;
@@ -73,15 +79,17 @@ function renderLabels(): void {
   }
 }
 
+function updateKeyRows(): void {
+  apiKeyRow.style.display = provider.value === 'gateway' ? '' : 'none';
+  typesafeApiKeyRow.style.display = provider.value === 'typesafe' ? '' : 'none';
+}
+
 async function load(): Promise<void> {
-  const stored = await chrome.storage.local.get([
-    'apiKey',
-    'enabled',
-    'threshold',
-    'labels',
-    ...VIEWS.map((view) => VIEW_SETTING_KEYS[view]),
-  ]);
+  const stored = await chrome.storage.local.get([...SETTING_KEYS]);
+  provider.value = isProvider(stored.provider) ? stored.provider : DEFAULT_SETTINGS.provider;
   apiKey.value = typeof stored.apiKey === 'string' ? stored.apiKey : '';
+  typesafeApiKey.value = typeof stored.typesafeApiKey === 'string' ? stored.typesafeApiKey : '';
+  updateKeyRows();
   enabled.checked = stored.enabled !== false;
   const value = typeof stored.threshold === 'number' ? stored.threshold : DEFAULT_SETTINGS.threshold;
   threshold.value = String(value);
@@ -98,6 +106,13 @@ async function load(): Promise<void> {
 
 apiKey.addEventListener('change', () => {
   void chrome.storage.local.set({ apiKey: apiKey.value }).then(showSaved);
+});
+provider.addEventListener('change', () => {
+  void chrome.storage.local.set({ provider: provider.value }).then(showSaved);
+  updateKeyRows();
+});
+typesafeApiKey.addEventListener('change', () => {
+  void chrome.storage.local.set({ typesafeApiKey: typesafeApiKey.value }).then(showSaved);
 });
 enabled.addEventListener('change', () => {
   void chrome.storage.local.set({ enabled: enabled.checked }).then(showSaved);

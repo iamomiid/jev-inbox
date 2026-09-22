@@ -4,7 +4,11 @@
   "version": "0.1.0",
   "description": "Moves unread Gmail rows to the top of the list, critical first, with inline label chips and a status bar.",
   "permissions": ["storage"],
-  "host_permissions": ["https://mail.google.com/*", "https://ai-gateway.vercel.sh/*"],
+  "host_permissions": [
+    "https://mail.google.com/*",
+    "https://ai-gateway.vercel.sh/*",
+    "https://api.typesafe.ai/*"
+  ],
   "background": {
     "service_worker": "background.js",
     "type": "module"

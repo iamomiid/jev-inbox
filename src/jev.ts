@@ -3,7 +3,8 @@ import {
   experimental_evaluate as evaluate,
   type Experimental_EvaluationQuestion,
 } from 'ai';
-import type { Classification, EmailState, LabelConfig } from './shared';
+import { createTypeSafeAi } from '@ai-sdk/typesafe-ai';
+import type { Classification, EmailState, LabelConfig, Provider } from './shared';
 
 function labelKey(id: string): string {
   return `label_${id.toLowerCase().replace(/[^a-z0-9_]/g, '')}`;
@@ -12,10 +13,13 @@ function labelKey(id: string): string {
 export async function classifyEmail(
   email: EmailState,
   apiKey: string,
-  labels: LabelConfig[]
+  labels: LabelConfig[],
+  provider: Provider
 ): Promise<Classification> {
-  const provider = createGateway({ apiKey });
-  const model = provider.evaluationModel('typesafe-ai/jev');
+  const model =
+    provider === 'typesafe'
+      ? createTypeSafeAi({ apiKey }).evaluationModel('jev-latest')
+      : createGateway({ apiKey }).evaluationModel('typesafe-ai/jev');
   const questions: Record<string, Experimental_EvaluationQuestion> = {
     critical: {
       type: 'boolean',

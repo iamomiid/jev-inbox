@@ -1,16 +1,20 @@
 import {
+  CONTENT_SETTING_KEYS,
   DEFAULT_SETTINGS,
   VIEWS,
   VIEW_SETTING_KEYS,
+  cacheVersion,
   isClassification,
   isLabelConfig,
-  labelsHash,
+  isProvider,
+  routeKey,
   threadKey,
   viewFromHash,
   type ClassifyResult,
   type Classification,
   type EmailState,
   type LabelConfig,
+  type Provider,
   type View,
 } from './shared';
 
@@ -18,8 +22,17 @@ type Entry = {
   key: string;
   state: EmailState;
   row: HTMLTableRowElement;
+};
+
+type Failure = {
   failureCount: number;
   nextAttemptAt: number;
+};
+
+type Anim = {
+  row: HTMLTableRowElement;
+  transform: string;
+  transition: string;
 };
 
 type Tracked = {
@@ -46,13 +59,15 @@ let halted = false;
 let errorMessage: string | null = null;
 let enabled = DEFAULT_SETTINGS.enabled;
 let threshold = DEFAULT_SETTINGS.threshold;
+let provider: Provider = DEFAULT_SETTINGS.provider;
 let labels: LabelConfig[] = [];
-let labelsVersion = labelsHash([]);
+let keyVersion = cacheVersion([], DEFAULT_SETTINGS.provider);
 let debounceId: number | undefined;
 let generation = 0;
 let retryId: number | undefined;
 let currentList: HTMLElement | null = null;
 let orderList: HTMLElement | null = null;
+let orderRoute = '';
 let animateNextOrder = false;
 let orderPassQueued = false;
 let flipCleanupId: number | undefined;
@@ -65,6 +80,8 @@ const viewEnabled: Record<View, boolean> = {
 };
 
 const candidates = new Map<string, Entry>();
+const failures = new Map<string, Failure>();
+const animating = new Map<HTMLTableRowElement, Anim>();
 const orderIndex = new Map<string, number>();
 const classifications = new Map<string, Classification>();
 
@@ -90,7 +107,8 @@ function armRetry(): void {
   let earliest: number | undefined;
   for (const entry of candidates.values()) {
     if (classifications.has(entry.key)) continue;
-    if (earliest === undefined || entry.nextAttemptAt < earliest) earliest = entry.nextAttemptAt;
+    const nextAttemptAt = failures.get(entry.key)?.nextAttemptAt ?? 0;
+    if (earliest === undefined || nextAttemptAt < earliest) earliest = nextAttemptAt;
   }
   if (earliest === undefined) return;
   retryId = window.setTimeout(() => {
@@ -167,7 +185,10 @@ function dispatchableEntries(): Entry[] {
   const now = Date.now();
   const out: Entry[] = [];
   for (const entry of candidates.values()) {
-    if (!classifications.has(entry.key) && entry.nextAttemptAt <= now) out.push(entry);
+    if (classifications.has(entry.key)) continue;
+    const failure = failures.get(entry.key);
+    if (failure !== undefined && failure.nextAttemptAt > now) continue;
+    out.push(entry);
   }
   return out;
 }
@@ -176,10 +197,12 @@ function isCriticalClassification(classification: Classification): boolean {
   return classification.criticalProbability >= threshold;
 }
 
-function recordFailure(entry: Entry): void {
-  entry.failureCount += 1;
-  entry.nextAttemptAt =
-    Date.now() + Math.min(BASE_BACKOFF_MS * 2 ** (entry.failureCount - 1), MAX_BACKOFF_MS);
+function recordFailure(key: string): void {
+  const failure = failures.get(key) ?? { failureCount: 0, nextAttemptAt: 0 };
+  failure.failureCount += 1;
+  failure.nextAttemptAt =
+    Date.now() + Math.min(BASE_BACKOFF_MS * 2 ** (failure.failureCount - 1), MAX_BACKOFF_MS);
+  failures.set(key, failure);
 }
 
 function isGcNode(node: Node): boolean {
@@ -225,7 +248,7 @@ function cacheKeyOf(row: HTMLTableRowElement): string | null {
   const threadId = carrier.getAttribute('data-thread-id');
   const lastMessageId = carrier.getAttribute('data-legacy-last-message-id');
   if (threadId === null || lastMessageId === null) return null;
-  return `${threadId}|${lastMessageId}|${labelsVersion}`;
+  return `${threadId}|${lastMessageId}|${keyVersion}`;
 }
 
 function classifiableUnreadKey(row: HTMLTableRowElement): string | null {
@@ -237,6 +260,9 @@ function classifiableUnreadKey(row: HTMLTableRowElement): string | null {
 function recordOrder(list: HTMLElement): void {
   const rows = [...list.querySelectorAll<HTMLTableRowElement>('tr.zA')];
   const ids = rows.map((row) => rowThreadId(row));
+  const withId = ids.filter((id): id is string => id !== null);
+  const knownCount = withId.filter((id) => orderIndex.has(id)).length;
+  if (orderIndex.size > 0 && knownCount * 2 < withId.length) orderIndex.clear();
   const known = new Set(orderIndex.keys());
   for (let i = 0; i < rows.length; i++) {
     const id = ids[i];
@@ -320,6 +346,16 @@ function applyRowOrder(): void {
   if (before !== null) flipMoved(ranked, before);
 }
 
+function finishAnimations(): void {
+  clearTimeout(flipCleanupId);
+  flipCleanupId = undefined;
+  for (const anim of animating.values()) {
+    anim.row.style.transform = anim.transform;
+    anim.row.style.transition = anim.transition;
+  }
+  animating.clear();
+}
+
 function flipMoved(ranked: Ranked[], before: Map<HTMLTableRowElement, DOMRect>): void {
   const moved: { row: HTMLTableRowElement; dx: number; dy: number }[] = [];
   for (const item of ranked) {
@@ -332,25 +368,30 @@ function flipMoved(ranked: Ranked[], before: Map<HTMLTableRowElement, DOMRect>):
     moved.push({ row: item.row, dx, dy });
   }
   if (moved.length === 0) return;
+  finishAnimations();
+  for (const item of moved) {
+    animating.set(item.row, {
+      row: item.row,
+      transform: item.row.style.transform,
+      transition: item.row.style.transition,
+    });
+  }
   for (const item of moved) {
     item.row.style.transform = `translate(${item.dx}px, ${item.dy}px)`;
   }
   void document.body.offsetWidth;
   for (const item of moved) {
+    const anim = animating.get(item.row);
     item.row.style.transition = 'transform 180ms';
-    item.row.style.transform = '';
+    item.row.style.transform = anim?.transform ?? '';
   }
-  clearTimeout(flipCleanupId);
   flipCleanupId = window.setTimeout(() => {
-    flipCleanupId = undefined;
-    for (const item of moved) {
-      item.row.style.transition = '';
-      item.row.style.transform = '';
-    }
+    finishAnimations();
   }, 250);
 }
 
 function restoreList(list: HTMLElement | null): void {
+  finishAnimations();
   if (list === null) return;
   const tracked: Tracked[] = [];
   for (const row of list.querySelectorAll<HTMLTableRowElement>('tr.zA')) {
@@ -369,9 +410,11 @@ function restoreList(list: HTMLElement | null): void {
 function runOrderPass(): void {
   const view = currentView();
   const list = visibleList();
-  if (list !== orderList) {
+  const route = routeKey(location.hash);
+  if (list !== orderList || route !== orderRoute) {
     restoreList(orderList);
     orderList = list ?? null;
+    orderRoute = route;
     orderIndex.clear();
   }
   if (!enabled || view === null || !viewEnabled[view] || !list) {
@@ -407,8 +450,8 @@ async function sync(): Promise<void> {
   for (const el of list.querySelectorAll<HTMLTableRowElement>('tr.zA.zE')) {
     const state = extractState(el);
     if (!state) continue;
-    const key = threadKey(state, labelsVersion);
-    const entry = candidates.get(key) ?? { key, state, row: el, failureCount: 0, nextAttemptAt: 0 };
+    const key = threadKey(state, keyVersion);
+    const entry = candidates.get(key) ?? { key, state, row: el };
     entry.state = state;
     entry.row = el;
     next.set(key, entry);
@@ -482,7 +525,7 @@ async function dispatchPending(): Promise<void> {
     } catch {
       if (!canDispatch(startedGeneration, startedList)) break;
       errorMessage = 'Classification request failed.';
-      for (const entry of batch) recordFailure(entry);
+      for (const entry of batch) recordFailure(entry.key);
       break;
     }
     if (!canDispatch(startedGeneration, startedList)) break;
@@ -492,7 +535,7 @@ async function dispatchPending(): Promise<void> {
           ? 'No API key saved. Open the extension popup and add it.'
           : 'Classification request failed.';
       if (response.error === 'missing_key') halted = true;
-      for (const entry of batch) recordFailure(entry);
+      for (const entry of batch) recordFailure(entry.key);
       break;
     }
     let applied = false;
@@ -502,14 +545,13 @@ async function dispatchPending(): Promise<void> {
       const classification = response.results[entry.key];
       if (classification !== undefined) {
         classifications.set(entry.key, classification);
-        entry.failureCount = 0;
-        entry.nextAttemptAt = 0;
+        failures.delete(entry.key);
         applied = true;
         continue;
       }
       rowFailure = true;
       const failure = response.errors[entry.key];
-      recordFailure(entry);
+      recordFailure(entry.key);
       if (failure !== undefined && (failure.status === 401 || failure.status === 403)) {
         authFailure = true;
       }
@@ -587,7 +629,7 @@ function chipSlot(row: HTMLTableRowElement): HTMLElement | null {
 
 function chipSignature(classification: Classification | undefined, failureCount: number): string {
   if (classification === undefined) return `p:${failureCount}`;
-  let signature = `c:${isCriticalClassification(classification)}|${threshold}|${labelsVersion}|`;
+  let signature = `c:${isCriticalClassification(classification)}|${threshold}|${keyVersion}|`;
   for (const label of labels) {
     const probability = classification.labels[label.id];
     if (probability === undefined || probability < threshold) continue;
@@ -606,7 +648,7 @@ function renderChips(): void {
     const slot = chipSlot(row);
     if (slot === null) continue;
     const classification = classifications.get(key);
-    const failureCount = candidates.get(key)?.failureCount ?? 0;
+    const failureCount = failures.get(key)?.failureCount ?? 0;
     const signature = chipSignature(classification, failureCount);
     if (slot.dataset.gcSig === signature) continue;
     slot.dataset.gcSig = signature;
@@ -651,20 +693,24 @@ function render(): void {
 }
 
 async function bootstrap(): Promise<void> {
-  const stored = await chrome.storage.local.get(null);
+  const stored = await chrome.storage.local.get([...CONTENT_SETTING_KEYS]);
   if (typeof stored.enabled === 'boolean') enabled = stored.enabled;
   if (typeof stored.threshold === 'number') threshold = stored.threshold;
+  if (isProvider(stored.provider)) provider = stored.provider;
   if (Array.isArray(stored.labels)) labels = stored.labels.filter(isLabelConfig);
-  labelsVersion = labelsHash(labels);
+  keyVersion = cacheVersion(labels, provider);
   for (const view of VIEWS) {
     const key = VIEW_SETTING_KEYS[view];
     const storedValue = stored[key];
     if (typeof storedValue === 'boolean') viewEnabled[view] = storedValue;
   }
-  for (const [storageKey, value] of Object.entries(stored)) {
-    if (!storageKey.startsWith(CACHE_PREFIX)) continue;
+  const allKeys =
+    typeof chrome.storage.local.getKeys === 'function' ? await chrome.storage.local.getKeys() : [];
+  const cacheKeys = allKeys.filter((storageKey) => storageKey.startsWith(CACHE_PREFIX));
+  const cached = cacheKeys.length > 0 ? await chrome.storage.local.get(cacheKeys) : {};
+  for (const [storageKey, value] of Object.entries(cached)) {
     const cacheKey = storageKey.slice(CACHE_PREFIX.length);
-    if (!cacheKey.endsWith(`|${labelsVersion}`)) continue;
+    if (!cacheKey.endsWith(`|${keyVersion}`)) continue;
     if (isClassification(value)) classifications.set(cacheKey, value);
   }
   observer = new MutationObserver((records) => {
@@ -675,6 +721,7 @@ async function bootstrap(): Promise<void> {
   observer.observe(document.documentElement, { childList: true, subtree: true });
   window.addEventListener('hashchange', () => {
     generation += 1;
+    finishAnimations();
     applyOrderNow();
     schedule();
   });
@@ -683,23 +730,36 @@ async function bootstrap(): Promise<void> {
     for (const [storageKey, change] of Object.entries(changes)) {
       if (!storageKey.startsWith(CACHE_PREFIX)) continue;
       const cacheKey = storageKey.slice(CACHE_PREFIX.length);
-      if (!cacheKey.endsWith(`|${labelsVersion}`)) continue;
-      if (isClassification(change.newValue)) classifications.set(cacheKey, change.newValue);
-      else classifications.delete(cacheKey);
-    }
-    if (changes.apiKey) {
-      halted = false;
-      for (const entry of candidates.values()) {
-        entry.failureCount = 0;
-        entry.nextAttemptAt = 0;
+      if (!cacheKey.endsWith(`|${keyVersion}`)) continue;
+      if (isClassification(change.newValue)) {
+        classifications.set(cacheKey, change.newValue);
+        failures.delete(cacheKey);
+      } else {
+        classifications.delete(cacheKey);
+        failures.delete(cacheKey);
       }
+    }
+    if (changes.apiKey || changes.typesafeApiKey) {
+      halted = false;
+      failures.clear();
+    }
+    if (changes.provider) {
+      provider = isProvider(changes.provider.newValue)
+        ? changes.provider.newValue
+        : DEFAULT_SETTINGS.provider;
+      keyVersion = cacheVersion(labels, provider);
+      classifications.clear();
+      failures.clear();
+      halted = false;
+      structural = true;
     }
     if (changes.labels) {
       const value = changes.labels.newValue;
       labels = Array.isArray(value) ? value.filter(isLabelConfig) : [];
-      labelsVersion = labelsHash(labels);
+      keyVersion = cacheVersion(labels, provider);
       candidates.clear();
       classifications.clear();
+      failures.clear();
       structural = true;
     }
     if (changes.enabled) {

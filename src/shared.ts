@@ -11,14 +11,24 @@ export const VIEW_SETTING_KEYS: Record<View, ViewSettingKey> = {
   other: 'viewOther',
 };
 
+export type Provider = 'gateway' | 'typesafe';
+
+export function isProvider(value: unknown): value is Provider {
+  return value === 'gateway' || value === 'typesafe';
+}
+
 export type Settings = {
   apiKey: string;
+  typesafeApiKey: string;
+  provider: Provider;
   enabled: boolean;
   threshold: number;
 } & Record<ViewSettingKey, boolean>;
 
 export const DEFAULT_SETTINGS: Settings = {
   apiKey: '',
+  typesafeApiKey: '',
+  provider: 'gateway',
   enabled: true,
   threshold: 0.7,
   viewInbox: true,
@@ -26,6 +36,20 @@ export const DEFAULT_SETTINGS: Settings = {
   viewSearch: true,
   viewOther: false,
 };
+
+export const SETTING_KEYS = [
+  'apiKey',
+  'typesafeApiKey',
+  'provider',
+  'enabled',
+  'threshold',
+  'labels',
+  ...VIEWS.map((view) => VIEW_SETTING_KEYS[view]),
+] as const;
+
+export const CONTENT_SETTING_KEYS = SETTING_KEYS.filter(
+  (key) => key !== 'apiKey' && key !== 'typesafeApiKey'
+);
 
 export type LabelConfig = { id: string; name: string; description: string };
 
@@ -75,6 +99,10 @@ export function labelsHash(labels: LabelConfig[]): string {
 
 export function threadKey(state: EmailState, version: string): string {
   return `${state.threadId}|${state.lastMessageId}|${version}`;
+}
+
+export function cacheVersion(labels: LabelConfig[], provider: Provider): string {
+  return `${provider}:${labelsHash(labels)}`;
 }
 
 export function isEmailState(value: unknown): value is EmailState {
@@ -153,4 +181,14 @@ export function viewFromHash(hash: string): View | null {
   if (head === 'category') return 'tabs';
   if (head === 'search' || head === 'advanced-search') return 'search';
   return 'other';
+}
+
+export function routeKey(hash: string): string {
+  const queryAt = hash.indexOf('?');
+  const query = queryAt === -1 ? '' : hash.slice(queryAt + 1);
+  const { decoded } = parseHash(hash);
+  const index = threadIndex(decoded);
+  const parts = index === -1 ? decoded : decoded.slice(0, index);
+  const route = parts.length === 0 ? 'inbox' : parts.join('/');
+  return query.length === 0 ? route : `${route}?${query}`;
 }

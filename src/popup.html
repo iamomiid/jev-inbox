@@ -20,7 +20,8 @@
         margin: 10px 0 4px 0;
       }
       input[type="password"],
-      input[type="text"] {
+      input[type="text"],
+      select {
         width: 100%;
         box-sizing: border-box;
         padding: 6px 8px;
@@ -97,8 +98,19 @@
       <input id="viewOther" type="checkbox" />
       <span>Labels and other folders</span>
     </div>
-    <label for="apiKey">TypeSafe Jev API key</label>
-    <input id="apiKey" type="password" autocomplete="off" />
+    <label for="provider">Provider</label>
+    <select id="provider">
+      <option value="gateway">Vercel AI Gateway</option>
+      <option value="typesafe">TypeSafe</option>
+    </select>
+    <div id="apiKeyRow">
+      <label for="apiKey">AI Gateway API key</label>
+      <input id="apiKey" type="password" autocomplete="off" />
+    </div>
+    <div id="typesafeApiKeyRow">
+      <label for="typesafeApiKey">TypeSafe API key</label>
+      <input id="typesafeApiKey" type="password" autocomplete="off" />
+    </div>
     <label for="threshold">Show if critical probability &ge; <span id="thresholdValue"></span></label>
     <input id="threshold" type="range" min="0.5" max="0.95" step="0.05" />
     <p class="row-label" style="margin-top: 12px">Labels</p>
