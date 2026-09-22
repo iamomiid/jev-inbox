@@ -47,7 +47,12 @@ export type Classification = {
 export type ClassifyMessage = { type: 'classify', emails: EmailState[] };
 
 export type ClassifyResult =
-  | { ok: true; results: Record<string, Classification> }
+  | {
+      ok: true;
+      results: Record<string, Classification>;
+      errorCount: number;
+      errorMessage: string | null;
+    }
   | { ok: false; error: 'missing_key' | 'failed' };
 
 export function threadKey(state: EmailState): string {

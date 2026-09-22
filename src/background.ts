@@ -41,17 +41,27 @@ async function handle(message: unknown): Promise<ClassifyResult> {
   const fresh = [...tasks.values()].filter((task) => results[task.key] === undefined);
 
   const queue = [...fresh];
+  let errorCount = 0;
+  let errorMessage: string | null = null;
   const workers = Array.from({ length: CONCURRENCY }, async () => {
     while (queue.length > 0) {
       const task = queue.shift();
       if (task === undefined) return;
-      const classification = await classifyEmail(task.email, apiKey);
-      results[task.key] = classification;
-      await chrome.storage.local.set({ [task.storeKey]: classification });
+      try {
+        const classification = await classifyEmail(task.email, apiKey);
+        results[task.key] = classification;
+        await chrome.storage.local.set({ [task.storeKey]: classification });
+      } catch (error) {
+        errorCount += 1;
+        if (errorMessage === null) {
+          const message = error instanceof Error ? error.message : String(error);
+          errorMessage = (message || 'Classification failed').slice(0, 160);
+        }
+      }
     }
   });
   await Promise.all(workers);
-  return { ok: true, results };
+  return { ok: true, results, errorCount, errorMessage };
 }
 
 function isClassification(value: unknown): value is Classification {

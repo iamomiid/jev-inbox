@@ -12,7 +12,7 @@ const STORAGE_KEYS = ['apiKey', 'enabled', 'threshold'];
 let section: HTMLElement | null = null;
 let sectionParent: HTMLElement | null = null;
 let inFlight = false;
-let failed = false;
+let errorMessage: string | null = null;
 let enabled = true;
 let threshold = 0.7;
 let debounceId: number | undefined;
@@ -138,11 +138,14 @@ async function dispatchPending(): Promise<void> {
   if (inFlight) return;
   if (pendingEntries().length === 0) return;
   inFlight = true;
-  failed = false;
-  let lastError: 'missing_key' | 'failed' | null = null;
+  errorMessage = null;
+  const attempted = new Set<string>();
   while (true) {
-    const batch = pendingEntries().slice(0, 20);
+    const batch = pendingEntries()
+      .filter((entry) => !attempted.has(entry.key))
+      .slice(0, 20);
     if (batch.length === 0) break;
+    for (const entry of batch) attempted.add(entry.key);
     let response: ClassifyResult;
     try {
       response = (await chrome.runtime.sendMessage({
@@ -150,28 +153,25 @@ async function dispatchPending(): Promise<void> {
         emails: batch.map((entry) => entry.state),
       })) as ClassifyResult;
     } catch {
-      lastError = 'failed';
+      errorMessage = 'Classification request failed.';
       break;
     }
     if (!response.ok) {
-      lastError = response.error;
+      errorMessage =
+        response.error === 'missing_key'
+          ? 'No API key saved. Open the extension popup and add it.'
+          : 'Classification request failed.';
       break;
     }
     for (const entry of batch) {
       const classification = response.results[entry.key];
       if (classification !== undefined) entry.classification = classification;
     }
-  }
-  failed = lastError === 'failed';
-  inFlight = false;
-  if (lastError === 'missing_key') {
-    if (section) {
-      const err = document.createElement('div');
-      err.className = 'gc-error';
-      err.textContent = 'No API key saved. Open the extension popup and add it.';
-      section.appendChild(err);
+    if (response.errorCount > 0) {
+      errorMessage = response.errorMessage ?? 'Classification request failed.';
     }
   }
+  inFlight = false;
 }
 
 function compareEntries(a: Entry, b: Entry): number {
@@ -211,10 +211,10 @@ function render(): void {
     status.textContent = `classifying ${pending.length}...`;
     section.appendChild(status);
   }
-  if (failed) {
+  if (errorMessage) {
     const err = document.createElement('div');
     err.className = 'gc-error';
-    err.textContent = 'Classification request failed.';
+    err.textContent = errorMessage;
     section.appendChild(err);
   }
 
