@@ -1,7 +1,10 @@
 {
-  "name": "gmail-critical",
+  "name": "jev-inbox",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
+  "description": "Chrome extension that puts unread Gmail first, critical on top, labeled by TypeSafe Jev.",
+  "repository": "github:iamomiid/jev-inbox",
   "type": "module",
   "scripts": {
     "build": "node scripts/build.mjs",

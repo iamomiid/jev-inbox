@@ -530,11 +530,15 @@ async function dispatchPending(): Promise<void> {
     }
     if (!canDispatch(startedGeneration, startedList)) break;
     if (!response.ok) {
-      errorMessage =
-        response.error === 'missing_key'
-          ? 'No API key saved. Open the extension popup and add it.'
-          : 'Classification request failed.';
-      if (response.error === 'missing_key') halted = true;
+      if (response.error === 'needs_ack') {
+        errorMessage = 'Open Jev Inbox to finish setup.';
+        halted = true;
+      } else if (response.error === 'missing_key') {
+        errorMessage = 'No API key saved. Open the extension popup and add it.';
+        halted = true;
+      } else {
+        errorMessage = 'Classification request failed.';
+      }
       for (const entry of batch) recordFailure(entry.key);
       break;
     }
@@ -740,6 +744,10 @@ async function bootstrap(): Promise<void> {
       }
     }
     if (changes.apiKey || changes.typesafeApiKey) {
+      halted = false;
+      failures.clear();
+    }
+    if (changes.privacyAck) {
       halted = false;
       failures.clear();
     }

@@ -1,0 +1,318 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Jev Inbox dev demo</title>
+    <script>
+      if (new URLSearchParams(location.search).get('theme') === 'dark') {
+        document.documentElement.classList.add('dark');
+      }
+    </script>
+    <link rel="stylesheet" href="../dist/section.css" />
+    <style>
+      :root {
+        --page-bg: #ffffff;
+        --page-text: #202124;
+        --page-muted: #5f6368;
+        --page-line: #e8eaed;
+        --page-hover: #f6f8fc;
+      }
+      :root.dark {
+        --page-bg: #202124;
+        --page-text: #e8eaed;
+        --page-muted: #9aa0a6;
+        --page-line: #3c4043;
+        --page-hover: #2a2b2e;
+      }
+      html,
+      body {
+        margin: 0;
+        background: var(--page-bg);
+        color: var(--page-text);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-size: 14px;
+      }
+      .bar {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 16px;
+        border-bottom: 1px solid var(--page-line);
+        color: var(--page-muted);
+        font-size: 13px;
+      }
+      .Cp {
+        padding: 8px 0;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      tr.zA {
+        border-bottom: 1px solid var(--page-line);
+        cursor: pointer;
+      }
+      tr.zA:hover {
+        background: var(--page-hover);
+      }
+      td {
+        padding: 10px 16px;
+        vertical-align: top;
+      }
+      td.xY {
+        width: 200px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      td.xW {
+        width: 80px;
+        text-align: right;
+        color: var(--page-muted);
+        font-size: 12px;
+      }
+      tr.zA.zE {
+        font-weight: 700;
+      }
+      .y2 {
+        display: block;
+        margin-top: 2px;
+        color: var(--page-muted);
+        font-weight: 400;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="bar">Jev Inbox demo, made-up mail only</div>
+    <div role="main">
+      <div class="Cp">
+        <table>
+          <tbody>
+            <tr class="zA zE">
+              <td class="xY">
+                <span class="zF" email="hello@plotline.example" name="Plotline Newsletter"
+                  >Plotline Newsletter</span
+                >
+              </td>
+              <td>
+                <div class="y6">
+                  <span class="bog"
+                    ><span
+                      class="bqe"
+                      data-thread-id="demothread000002"
+                      data-legacy-thread-id="legacy000002"
+                      data-legacy-last-message-id="msg000002"
+                      >Ten tips for balcony tomatoes</span
+                    ></span
+                  >
+                </div>
+                <span class="y2"><span class="Zt"> - </span>Tomatoes grow well in pots.</span>
+              </td>
+              <td class="xW"><span title="Mon, Sep 22 2026, 08:05">08:05</span></td>
+            </tr>
+            <tr class="zA">
+              <td class="xY">
+                <span class="zF" email="orders@greenhouse.example" name="Greenhouse Shop"
+                  >Greenhouse Shop</span
+                >
+              </td>
+              <td>
+                <div class="y6">
+                  <span class="bog"
+                    ><span
+                      class="bqe"
+                      data-thread-id="demothread000004"
+                      data-legacy-thread-id="legacy000004"
+                      data-legacy-last-message-id="msg000004"
+                      >Your order left the warehouse</span
+                    ></span
+                  >
+                </div>
+                <span class="y2">Tracking number is in the app.</span>
+              </td>
+              <td class="xW"><span title="Mon, Sep 22 2026, 08:40">08:40</span></td>
+            </tr>
+            <tr class="zA zE">
+              <td class="xY">
+                <span class="zF" email="appointments@passport.example" name="Passport Office"
+                  >Passport Office</span
+                >
+              </td>
+              <td>
+                <div class="y6">
+                  <span class="bog"
+                    ><span
+                      class="bqe"
+                      data-thread-id="demothread000009"
+                      data-legacy-thread-id="legacy000009"
+                      data-legacy-last-message-id="msg000009"
+                      >Bring two photos to your appointment</span
+                    ></span
+                  >
+                </div>
+                <span class="y2">Appointment is Thursday at 10:30.</span>
+              </td>
+              <td class="xW"><span title="Mon, Sep 22 2026, 09:02">09:02</span></td>
+            </tr>
+            <tr class="zA">
+              <td class="xY">
+                <span class="zF" email="digest@weather.example" name="Weather Digest"
+                  >Weather Digest</span
+                >
+              </td>
+              <td>
+                <div class="y6">
+                  <span class="bog"
+                    ><span
+                      class="bqe"
+                      data-thread-id="demothread000010"
+                      data-legacy-thread-id="legacy000010"
+                      data-legacy-last-message-id="msg000010"
+                      >A grey week ahead</span
+                    ></span
+                  >
+                </div>
+                <span class="y2">Rain on Tuesday and Wednesday.</span>
+              </td>
+              <td class="xW"><span title="Mon, Sep 22 2026, 09:20">09:20</span></td>
+            </tr>
+            <tr class="zA zE">
+              <td class="xY">
+                <span class="zF" email="statements@meadowbank.example" name="Meadow Bank"
+                  >Meadow Bank</span
+                >
+              </td>
+              <td>
+                <div class="y6">
+                  <span class="bog"
+                    ><span
+                      class="bqe"
+                      data-thread-id="demothread000003"
+                      data-legacy-thread-id="legacy000003"
+                      data-legacy-last-message-id="msg000003"
+                      >Invoice 128 is due Friday</span
+                    ></span
+                  >
+                </div>
+                <span class="y2">Pay before Friday to avoid the late fee.</span>
+              </td>
+              <td class="xW"><span title="Mon, Sep 22 2026, 09:48">09:48</span></td>
+            </tr>
+            <tr class="zA zE">
+              <td class="xY">
+                <span class="zF" email="loans@citylibrary.example" name="City Library"
+                  >City Library</span
+                >
+              </td>
+              <td>
+                <div class="y6">
+                  <span class="bog"
+                    ><span
+                      class="bqe"
+                      data-thread-id="demothread000005"
+                      data-legacy-thread-id="legacy000005"
+                      data-legacy-last-message-id="msg000005"
+                      >Two books are due back</span
+                    ></span
+                  >
+                </div>
+                <span class="y2">Renew online or return them this week.</span>
+              </td>
+              <td class="xW"><span title="Mon, Sep 22 2026, 10:10">10:10</span></td>
+            </tr>
+            <tr class="zA">
+              <td class="xY">
+                <span class="zF" email="receipts@rides.example" name="Ride Sharing"
+                  >Ride Sharing</span
+                >
+              </td>
+              <td>
+                <div class="y6">
+                  <span class="bog"
+                    ><span
+                      class="bqe"
+                      data-thread-id="demothread000006"
+                      data-legacy-thread-id="legacy000006"
+                      data-legacy-last-message-id="msg000006"
+                      >Your Friday ride receipt</span
+                    ></span
+                  >
+                </div>
+                <span class="y2">Total 12.40, paid with the saved card.</span>
+              </td>
+              <td class="xW"><span title="Mon, Sep 22 2026, 10:35">10:35</span></td>
+            </tr>
+            <tr class="zA zE">
+              <td class="xY">
+                <span class="zF" email="migration@office.example" name="Migration Office"
+                  >Migration Office</span
+                >
+              </td>
+              <td>
+                <div class="y6">
+                  <span class="bog"
+                    ><span
+                      class="bqe"
+                      data-thread-id="demothread000001"
+                      data-legacy-thread-id="legacy000001"
+                      data-legacy-last-message-id="msg000001"
+                      >Your residence appointment is Monday at 9:00</span
+                    ></span
+                  >
+                </div>
+                <span class="y2">Bring the permit letter and your passport.</span>
+              </td>
+              <td class="xW"><span title="Mon, Sep 22 2026, 11:02">11:02</span></td>
+            </tr>
+            <tr class="zA zE">
+              <td class="xY">
+                <span class="zF" email="notes@standup.example" name="Team Standup Notes"
+                  >Team Standup Notes</span
+                >
+              </td>
+              <td>
+                <div class="y6">
+                  <span class="bog"
+                    ><span
+                      class="bqe"
+                      data-thread-id="demothread000008"
+                      data-legacy-thread-id="legacy000008"
+                      data-legacy-last-message-id="msg000008"
+                      >Notes from this morning</span
+                    ></span
+                  >
+                </div>
+                <span class="y2">Three items were carried over.</span>
+              </td>
+              <td class="xW"><span title="Mon, Sep 22 2026, 11:30">11:30</span></td>
+            </tr>
+            <tr class="zA">
+              <td class="xY">
+                <span class="zF" email="billing@power.example" name="Power Company"
+                  >Power Company</span
+                >
+              </td>
+              <td>
+                <div class="y6">
+                  <span class="bog"
+                    ><span
+                      class="bqe"
+                      data-thread-id="demothread000007"
+                      data-legacy-thread-id="legacy000007"
+                      data-legacy-last-message-id="msg000007"
+                      >Your monthly usage summary</span
+                    ></span
+                  >
+                </div>
+                <span class="y2">Usage was 8 percent lower than last month.</span>
+              </td>
+              <td class="xW"><span title="Mon, Sep 22 2026, 11:55">11:55</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <script src="../dist/demo.js"></script>
+    <script src="../dist/content.js"></script>
+  </body>
+</html>

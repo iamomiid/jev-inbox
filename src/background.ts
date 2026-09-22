@@ -1,4 +1,4 @@
-import { classifyEmail } from './jev';
+import { classifyEmail, testConnection } from './jev';
 import {
   cacheVersion,
   isClassification,
@@ -13,6 +13,8 @@ import {
   type EmailState,
   type LabelConfig,
   type Provider,
+  type TestMessage,
+  type TestResult,
 } from './shared';
 
 const CACHE_PREFIX = 'crit:';
@@ -30,18 +32,40 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
   return true;
 });
 
-async function handle(message: unknown): Promise<ClassifyResult> {
+async function handle(message: unknown): Promise<ClassifyResult | TestResult> {
+  const test = testRequest(message);
   const request = classifyRequest(message);
-  if (request === undefined) return { ok: false, error: 'failed' } satisfies ClassifyResult;
-  const { emails, labels } = request;
+  if (!test && request === undefined) {
+    return { ok: false, error: 'failed' } satisfies ClassifyResult;
+  }
 
-  const { provider: storedProvider, apiKey, typesafeApiKey } = await chrome.storage.local.get([
-    'provider',
-    'apiKey',
-    'typesafeApiKey',
-  ]);
+  const {
+    provider: storedProvider,
+    apiKey,
+    typesafeApiKey,
+    privacyAck,
+  } = await chrome.storage.local.get(['provider', 'apiKey', 'typesafeApiKey', 'privacyAck']);
   const provider = isProvider(storedProvider) ? storedProvider : 'gateway';
   const key = provider === 'typesafe' ? typesafeApiKey : apiKey;
+  if (test) {
+    if (typeof key !== 'string' || key.length === 0) {
+      return { ok: false, message: 'No API key saved.' } satisfies TestResult;
+    }
+    try {
+      await testConnection(key, provider);
+      return { ok: true } satisfies TestResult;
+    } catch (error) {
+      const failure = toClassifyError(error);
+      return {
+        ok: false,
+        message:
+          failure.status === undefined ? failure.message : `${failure.status}: ${failure.message}`,
+      } satisfies TestResult;
+    }
+  }
+  if (request === undefined) return { ok: false, error: 'failed' } satisfies ClassifyResult;
+  const { emails, labels } = request;
+  if (privacyAck !== true) return { ok: false, error: 'needs_ack' } satisfies ClassifyResult;
   if (typeof key !== 'string' || key.length === 0) {
     return { ok: false, error: 'missing_key' } satisfies ClassifyResult;
   }
@@ -170,4 +194,10 @@ function classifyRequest(value: unknown): ClassifyMessage | undefined {
   if (emails.length !== value.emails.length) return undefined;
   if (labels.length !== value.labels.length) return undefined;
   return { type: 'classify', emails, labels };
+}
+
+function testRequest(value: unknown): TestMessage | undefined {
+  if (typeof value !== 'object' || value === null) return undefined;
+  if (!('type' in value) || value.type !== 'test') return undefined;
+  return { type: 'test' };
 }

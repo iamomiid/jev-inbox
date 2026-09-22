@@ -10,16 +10,34 @@ function labelKey(id: string): string {
   return `label_${id.toLowerCase().replace(/[^a-z0-9_]/g, '')}`;
 }
 
+function evaluationModel(provider: Provider, apiKey: string) {
+  return provider === 'typesafe'
+    ? createTypeSafeAi({ apiKey }).evaluationModel('jev-latest')
+    : createGateway({ apiKey }).evaluationModel('typesafe-ai/jev');
+}
+
+export async function testConnection(apiKey: string, provider: Provider): Promise<void> {
+  const result = await evaluate({
+    model: evaluationModel(provider, apiKey),
+    state: { subject: 'Jev Inbox connection test' },
+    questions: {
+      reachable: {
+        type: 'boolean',
+        instructions: 'Answer true.',
+        criteria: { true: 'Always true.', false: 'Never.' },
+      },
+    },
+  });
+  if (result.answers.reachable.type !== 'boolean') throw new Error('unexpected answer shapes');
+}
+
 export async function classifyEmail(
   email: EmailState,
   apiKey: string,
   labels: LabelConfig[],
   provider: Provider
 ): Promise<Classification> {
-  const model =
-    provider === 'typesafe'
-      ? createTypeSafeAi({ apiKey }).evaluationModel('jev-latest')
-      : createGateway({ apiKey }).evaluationModel('typesafe-ai/jev');
+  const model = evaluationModel(provider, apiKey);
   const questions: Record<string, Experimental_EvaluationQuestion> = {
     critical: {
       type: 'boolean',

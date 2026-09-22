@@ -1,8 +1,15 @@
 {
   "manifest_version": 3,
-  "name": "Gmail Critical",
+  "name": "Jev Inbox for Gmail",
+  "short_name": "Jev Inbox",
   "version": "0.1.0",
-  "description": "Moves unread Gmail rows to the top of the list, critical first, with inline label chips and a status bar.",
+  "description": "Unread Gmail first, critical at the top, with your own labels, classified by TypeSafe Jev.",
+  "icons": {
+    "16": "assets/icon-16.png",
+    "32": "assets/icon-32.png",
+    "48": "assets/icon-48.png",
+    "128": "assets/icon-128.png"
+  },
   "permissions": ["storage"],
   "host_permissions": [
     "https://mail.google.com/*",
@@ -23,6 +30,12 @@
   ],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Gmail Critical"
+    "default_title": "Jev Inbox",
+    "default_icon": {
+      "16": "assets/icon-16.png",
+      "32": "assets/icon-32.png",
+      "48": "assets/icon-48.png",
+      "128": "assets/icon-128.png"
+    }
   }
 }

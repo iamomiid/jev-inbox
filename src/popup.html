@@ -2,125 +2,710 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>Gmail Critical</title>
+    <title>Jev Inbox</title>
     <style>
-      body {
-        font-family: Roboto, "Google Sans", Arial, sans-serif;
-        font-size: 13px;
-        color: #202124;
-        width: 260px;
-        margin: 0;
-        padding: 12px;
+      :root {
+        --bg: #ffffff;
+        --surface: #f4f4f6;
+        --text: #1f2328;
+        --muted: #57606a;
+        --border: #d8d8dd;
+        --accent: #4f46e5;
+        --accent-soft: #eef2ff;
+        --accent-contrast: #ffffff;
+        --ok: #1a7f37;
+        --danger: #d5453b;
+        color-scheme: light;
       }
-      label,
-      .row-label {
-        display: block;
-        font-size: 11px;
-        color: #5f6368;
-        margin: 10px 0 4px 0;
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #16181d;
+          --surface: #1f232b;
+          --text: #e6e8ec;
+          --muted: #9aa3af;
+          --border: #333842;
+          --accent: #818cf8;
+          --accent-soft: #272b46;
+          --accent-contrast: #16181d;
+          --ok: #3fb950;
+          --danger: #f0695f;
+          color-scheme: dark;
+        }
       }
-      input[type="password"],
-      input[type="text"],
-      select {
-        width: 100%;
+      * {
         box-sizing: border-box;
-        padding: 6px 8px;
-        border: 1px solid #dadce0;
-        border-radius: 4px;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      body {
+        width: 380px;
+        max-height: 580px;
+        overflow-y: auto;
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         font-size: 13px;
+        line-height: 1.45;
       }
-      input[type="range"] {
-        width: 100%;
+      :focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
       }
-      button {
-        font-size: 13px;
-        padding: 6px 12px;
-        border: 1px solid #dadce0;
-        border-radius: 4px;
-        background: #fff;
-        color: #3c4043;
-        cursor: pointer;
-        margin-top: 10px;
-      }
-      button:hover {
-        background: #f8f9fa;
-      }
-      #saved {
-        display: none;
-        margin-left: 8px;
-        color: #188038;
-      }
-      .label-error {
-        display: block;
-        margin-top: 6px;
+      h2 {
+        margin: 0;
         font-size: 11px;
-        color: #d93025;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--muted);
       }
-      .toggle-row {
+      a {
+        color: var(--accent);
+        text-decoration: none;
+      }
+      a:hover {
+        text-decoration: underline;
+      }
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        margin: -1px;
+        padding: 0;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        white-space: nowrap;
+        border: 0;
+      }
+      .header {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        padding: 12px 16px;
+        background: var(--bg);
+        border-bottom: 1px solid var(--border);
+      }
+      .header-top {
         display: flex;
         align-items: center;
         gap: 8px;
       }
-      .toggle-row span {
-        color: #202124;
+      .brand-icon {
+        display: block;
+        border-radius: 6px;
       }
-      .label-row {
-        margin: 6px 0;
+      .brand-name {
+        flex: 1;
+        font-size: 14px;
+        font-weight: 600;
       }
-      .label-row input {
-        margin: 2px 0;
+      .status-line {
+        margin: 4px 0 0;
+        font-size: 11px;
+        color: var(--muted);
       }
-      .label-row button {
+      .saved {
+        font-size: 11px;
+        color: var(--ok);
+        opacity: 0;
+        transition: opacity 0.15s ease;
+      }
+      .saved.show {
+        opacity: 1;
+      }
+      .switch {
+        position: relative;
+        display: inline-flex;
+        flex: none;
+      }
+      .switch input {
+        position: absolute;
+        width: 100%;
+        height: 100%;
         margin: 0;
-        padding: 2px 8px;
+        opacity: 0;
+        cursor: pointer;
+      }
+      .switch-track {
+        display: block;
+        width: 36px;
+        height: 20px;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: var(--surface);
+        transition: background 0.15s ease, border-color 0.15s ease;
+      }
+      .switch-track::after {
+        content: "";
+        display: block;
+        width: 14px;
+        height: 14px;
+        margin: 2px;
+        border-radius: 50%;
+        background: #ffffff;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+        transition: transform 0.15s ease;
+      }
+      .switch input:checked + .switch-track {
+        background: var(--accent);
+        border-color: var(--accent);
+      }
+      .switch input:checked + .switch-track::after {
+        transform: translateX(16px);
+      }
+      .switch input:focus-visible + .switch-track {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+      .card {
+        padding: 12px;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: var(--surface);
+      }
+      .notice {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin: 16px;
+      }
+      .notice p {
+        margin: 0;
+      }
+      .notice-actions {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .section {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 16px;
+        border-bottom: 1px solid var(--border);
+      }
+      .section-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .count {
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .hint {
+        margin: 0;
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .empty {
+        margin: 0;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      button {
+        padding: 6px 12px;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: var(--bg);
+        color: var(--text);
+        font: inherit;
+        cursor: pointer;
+      }
+      button:hover {
+        background: var(--surface);
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+      button.primary {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: var(--accent-contrast);
+      }
+      button.primary:hover {
+        background: var(--accent);
+        filter: brightness(1.05);
+      }
+      button.confirm {
+        border-color: var(--danger);
+        color: var(--danger);
+      }
+      .segmented {
+        position: relative;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 4px;
+        padding: 4px;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: var(--surface);
+      }
+      .segmented input {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        opacity: 0;
+      }
+      .segmented label {
+        padding: 6px 8px;
+        border: 1px solid transparent;
+        border-radius: 8px;
+        color: var(--muted);
+        font-size: 12px;
+        text-align: center;
+        cursor: pointer;
+      }
+      .segmented input:checked + label {
+        border-color: var(--border);
+        background: var(--bg);
+        color: var(--text);
+      }
+      .segmented input:focus-visible + label {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+      .field {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .field > label {
+        font-size: 11px;
+        color: var(--muted);
+      }
+      input[type="text"],
+      input[type="password"],
+      textarea {
+        width: 100%;
+        padding: 6px 8px;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: var(--bg);
+        color: var(--text);
+        font: inherit;
+      }
+      textarea {
+        resize: none;
+        overflow: hidden;
+      }
+      .key-input {
+        position: relative;
+        display: flex;
+      }
+      .key-input input {
+        padding-right: 34px;
+      }
+      .eye {
+        position: absolute;
+        top: 2px;
+        right: 2px;
+        bottom: 2px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        padding: 0;
+        border: 0;
+        border-radius: 8px;
+        background: none;
+        color: var(--muted);
+      }
+      .eye .icon-eye-off {
+        display: none;
+      }
+      .eye[aria-pressed="true"] .icon-eye {
+        display: none;
+      }
+      .eye[aria-pressed="true"] .icon-eye-off {
+        display: inline;
+      }
+      .hint-link {
+        align-self: flex-start;
+        font-size: 11px;
+      }
+      .test-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .test-result {
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .test-result.ok {
+        color: var(--ok);
+      }
+      .test-result.error {
+        color: var(--danger);
+      }
+      .switch-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .switch-text {
+        display: flex;
+        flex-direction: column;
+        cursor: pointer;
+      }
+      .switch-title {
+        font-size: 13px;
+      }
+      .switch-hint {
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .range {
+        width: 100%;
+        margin: 0;
+        accent-color: var(--accent);
+      }
+      #labels {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .label-card {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        padding: 8px;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: var(--surface);
+      }
+      .label-card .dot {
+        flex: none;
+        width: 10px;
+        height: 10px;
+        margin-top: 8px;
+        border-radius: 50%;
+      }
+      .label-card .fields {
+        display: flex;
+        flex: 1;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .label-card .trash {
+        display: inline-flex;
+        flex: none;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        padding: 0;
+        border: 0;
+        border-radius: 8px;
+        background: none;
+        color: var(--muted);
+      }
+      .label-card .trash:hover {
+        background: var(--bg);
+        color: var(--danger);
+      }
+      .label-card .trash.confirm {
+        border: 1px solid var(--danger);
+        background: var(--bg);
+        color: var(--danger);
+      }
+      .label-error {
+        display: block;
+        min-height: 14px;
+        font-size: 11px;
+        color: var(--danger);
+      }
+      .footer {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 12px 16px 16px;
+      }
+      .footer .version {
+        margin-right: auto;
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .footer-links {
+        display: flex;
+        gap: 12px;
+        font-size: 11px;
+      }
+      .dot.hue-0 {
+        background: #1e8e3e;
+      }
+      .dot.hue-1 {
+        background: #1a73e8;
+      }
+      .dot.hue-2 {
+        background: #b06000;
+      }
+      .dot.hue-3 {
+        background: #d93025;
+      }
+      .dot.hue-4 {
+        background: #7627bb;
+      }
+      .dot.hue-5 {
+        background: #007b83;
+      }
+      .dot.hue-6 {
+        background: #a8377b;
+      }
+      .dot.hue-7 {
+        background: #5f6368;
       }
     </style>
   </head>
   <body>
-    <div class="toggle-row">
-      <input id="enabled" type="checkbox" />
-      <span>Enabled</span>
+    <header class="header">
+      <div class="header-top">
+        <img class="brand-icon" src="assets/icon-32.png" width="20" height="20" alt="" />
+        <span class="brand-name">Jev Inbox</span>
+        <span id="saved" class="saved">Saved</span>
+        <label class="switch">
+          <input id="enabled" type="checkbox" />
+          <span class="switch-track" aria-hidden="true"></span>
+          <span class="sr-only">Enabled</span>
+        </label>
+      </div>
+      <p id="statusLine" class="status-line"></p>
+    </header>
+
+    <div id="privacyNotice" class="card notice" hidden>
+      <p>
+        Jev Inbox sends the sender, subject, a short snippet and date of unread emails on screen to
+        Jev (through Vercel AI Gateway or TypeSafe, depending on your key) to classify them. Email
+        bodies are never sent. Results are cached in this browser.
+      </p>
+      <div class="notice-actions">
+        <button id="gotIt" class="primary" type="button">Got it</button>
+        <a
+          class="hint-link"
+          href="https://github.com/iamomiid/jev-inbox/blob/main/PRIVACY.md"
+          target="_blank"
+          rel="noreferrer"
+          >Privacy</a
+        >
+      </div>
     </div>
-    <p class="row-label" style="margin-top: 12px">Show on</p>
-    <div class="toggle-row">
-      <input id="viewInbox" type="checkbox" />
-      <span>Inbox (Primary)</span>
-    </div>
-    <div class="toggle-row">
-      <input id="viewTabs" type="checkbox" />
-      <span>Other inbox tabs</span>
-    </div>
-    <div class="toggle-row">
-      <input id="viewSearch" type="checkbox" />
-      <span>Search results</span>
-    </div>
-    <div class="toggle-row">
-      <input id="viewOther" type="checkbox" />
-      <span>Labels and other folders</span>
-    </div>
-    <label for="provider">Provider</label>
-    <select id="provider">
-      <option value="gateway">Vercel AI Gateway</option>
-      <option value="typesafe">TypeSafe</option>
-    </select>
-    <div id="apiKeyRow">
-      <label for="apiKey">AI Gateway API key</label>
-      <input id="apiKey" type="password" autocomplete="off" />
-    </div>
-    <div id="typesafeApiKeyRow">
-      <label for="typesafeApiKey">TypeSafe API key</label>
-      <input id="typesafeApiKey" type="password" autocomplete="off" />
-    </div>
-    <label for="threshold">Show if critical probability &ge; <span id="thresholdValue"></span></label>
-    <input id="threshold" type="range" min="0.5" max="0.95" step="0.05" />
-    <p class="row-label" style="margin-top: 12px">Labels</p>
-    <div id="labels"></div>
-    <button id="addLabel" type="button">Add label</button>
-    <button id="saveLabels" type="button">Save labels</button>
-    <span id="labelError" class="label-error"></span>
-    <p class="row-label" style="margin-top: 12px">Cache holds past classifications.</p>
-    <button id="clear">Clear cache</button>
-    <span id="saved">Saved</span>
+
+    <section class="section">
+      <h2>Connection</h2>
+      <div class="segmented" role="radiogroup" aria-label="Provider">
+        <input type="radio" name="provider" id="providerGateway" value="gateway" />
+        <label for="providerGateway">AI Gateway</label>
+        <input type="radio" name="provider" id="providerTypesafe" value="typesafe" />
+        <label for="providerTypesafe">TypeSafe</label>
+      </div>
+      <div id="apiKeyRow" class="field">
+        <label for="apiKey">AI Gateway key</label>
+        <div class="key-input">
+          <input
+            id="apiKey"
+            type="password"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="AI Gateway API key"
+          />
+          <button id="apiKeyEye" class="eye" type="button" aria-pressed="false" aria-label="Show key">
+            <svg
+              class="icon-eye"
+              viewBox="0 0 24 24"
+              width="16"
+              height="16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6-10-6-10-6Z" />
+              <circle cx="12" cy="12" r="3" />
+            </svg>
+            <svg
+              class="icon-eye-off"
+              viewBox="0 0 24 24"
+              width="16"
+              height="16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6-10-6-10-6Z" />
+              <circle cx="12" cy="12" r="3" />
+              <path d="M4 20 20 4" />
+            </svg>
+          </button>
+        </div>
+        <a
+          class="hint-link"
+          href="https://vercel.com/docs/ai-gateway"
+          target="_blank"
+          rel="noreferrer"
+          >Where do I get a key?</a
+        >
+      </div>
+      <div id="typesafeApiKeyRow" class="field">
+        <label for="typesafeApiKey">TypeSafe key</label>
+        <div class="key-input">
+          <input
+            id="typesafeApiKey"
+            type="password"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="TypeSafe API key"
+          />
+          <button
+            id="typesafeApiKeyEye"
+            class="eye"
+            type="button"
+            aria-pressed="false"
+            aria-label="Show key"
+          >
+            <svg
+              class="icon-eye"
+              viewBox="0 0 24 24"
+              width="16"
+              height="16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6-10-6-10-6Z" />
+              <circle cx="12" cy="12" r="3" />
+            </svg>
+            <svg
+              class="icon-eye-off"
+              viewBox="0 0 24 24"
+              width="16"
+              height="16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6-10-6-10-6Z" />
+              <circle cx="12" cy="12" r="3" />
+              <path d="M4 20 20 4" />
+            </svg>
+          </button>
+        </div>
+        <a class="hint-link" href="https://docs.typesafe.ai" target="_blank" rel="noreferrer"
+          >Where do I get a key?</a
+        >
+      </div>
+      <div class="test-row">
+        <button id="testBtn" type="button">Test connection</button>
+        <span id="testResult" class="test-result"></span>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-head">
+        <h2>Labels</h2>
+        <span id="labelCount" class="count"></span>
+      </div>
+      <p id="labelsEmpty" class="empty">
+        Labels let Jev tag unread email with your own categories. Describe what belongs under each
+        one, for example Visa: residence permits, IND letters, immigration appointments.
+      </p>
+      <div id="labels"></div>
+      <button id="addLabel" type="button">Add label</button>
+      <span id="labelError" class="label-error"></span>
+    </section>
+
+    <section class="section">
+      <h2>Show on</h2>
+      <div class="switch-row">
+        <label class="switch">
+          <input id="viewInbox" type="checkbox" />
+          <span class="switch-track" aria-hidden="true"></span>
+          <span class="sr-only">Inbox</span>
+        </label>
+        <label class="switch-text" for="viewInbox">
+          <span class="switch-title">Inbox</span>
+          <span class="switch-hint">The Primary tab of your inbox</span>
+        </label>
+      </div>
+      <div class="switch-row">
+        <label class="switch">
+          <input id="viewTabs" type="checkbox" />
+          <span class="switch-track" aria-hidden="true"></span>
+          <span class="sr-only">Other inbox tabs</span>
+        </label>
+        <label class="switch-text" for="viewTabs">
+          <span class="switch-title">Other inbox tabs</span>
+          <span class="switch-hint">Promotions, Social, Updates and Forums</span>
+        </label>
+      </div>
+      <div class="switch-row">
+        <label class="switch">
+          <input id="viewSearch" type="checkbox" />
+          <span class="switch-track" aria-hidden="true"></span>
+          <span class="sr-only">Search results</span>
+        </label>
+        <label class="switch-text" for="viewSearch">
+          <span class="switch-title">Search results</span>
+          <span class="switch-hint">Pages that list the results of a search</span>
+        </label>
+      </div>
+      <div class="switch-row">
+        <label class="switch">
+          <input id="viewOther" type="checkbox" />
+          <span class="switch-track" aria-hidden="true"></span>
+          <span class="sr-only">Labels and other folders</span>
+        </label>
+        <label class="switch-text" for="viewOther">
+          <span class="switch-title">Labels and other folders</span>
+          <span class="switch-hint">Labels, Starred, All mail and other views</span>
+        </label>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-head">
+        <h2>Sensitivity</h2>
+        <span id="thresholdValue" class="count"></span>
+      </div>
+      <input
+        id="threshold"
+        class="range"
+        type="range"
+        min="0.5"
+        max="0.95"
+        step="0.05"
+        aria-label="Sensitivity"
+      />
+      <p class="hint">
+        Lower sensitivity shows more critical emails and chips. Higher shows only confident ones.
+      </p>
+    </section>
+
+    <footer class="footer">
+      <button id="clear" type="button">Clear cache</button>
+      <span id="version" class="version"></span>
+      <span class="footer-links">
+        <a href="https://github.com/iamomiid/jev-inbox" target="_blank" rel="noreferrer">GitHub</a>
+        <a href="https://github.com/iamomiid/jev-inbox/blob/main/PRIVACY.md" target="_blank" rel="noreferrer"
+          >Privacy</a
+        >
+      </span>
+    </footer>
     <script src="popup.js"></script>
   </body>
 </html>

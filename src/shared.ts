@@ -23,6 +23,7 @@ export type Settings = {
   provider: Provider;
   enabled: boolean;
   threshold: number;
+  privacyAck: boolean;
 } & Record<ViewSettingKey, boolean>;
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -31,6 +32,7 @@ export const DEFAULT_SETTINGS: Settings = {
   provider: 'gateway',
   enabled: true,
   threshold: 0.7,
+  privacyAck: false,
   viewInbox: true,
   viewTabs: true,
   viewSearch: true,
@@ -43,6 +45,7 @@ export const SETTING_KEYS = [
   'provider',
   'enabled',
   'threshold',
+  'privacyAck',
   'labels',
   ...VIEWS.map((view) => VIEW_SETTING_KEYS[view]),
 ] as const;
@@ -86,7 +89,11 @@ export type ClassifyResult =
       results: Record<string, Classification>;
       errors: Record<string, ClassifyError>;
     }
-  | { ok: false; error: 'missing_key' | 'failed' };
+  | { ok: false; error: 'missing_key' | 'failed' | 'needs_ack' };
+
+export type TestMessage = { type: 'test' };
+
+export type TestResult = { ok: true } | { ok: false; message: string };
 
 export function labelsHash(labels: LabelConfig[]): string {
   let h = 5381;
