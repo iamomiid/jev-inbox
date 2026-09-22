@@ -4,7 +4,6 @@ import {
   VIEW_SETTING_KEYS,
   isLabelConfig,
   labelsHash,
-  threadHash,
   threadKey,
   viewFromHash,
   type ClassifyResult,
@@ -17,16 +16,23 @@ import {
 type Entry = {
   key: string;
   state: EmailState;
+  row: HTMLTableRowElement;
   classification?: Classification;
   failureCount: number;
   nextAttemptAt: number;
+};
+
+type Tracked = {
+  row: HTMLTableRowElement;
+  index: number;
+  entry: Entry | undefined;
 };
 
 const DEBOUNCE_MS = 800;
 const BATCH_SIZE = 20;
 const BASE_BACKOFF_MS = 60_000;
 const MAX_BACKOFF_MS = 600_000;
-const CHIP_COLORS = 8;
+const CHIP_HUES = 8;
 const STORAGE_KEYS = [
   'enabled',
   'threshold',
@@ -34,7 +40,8 @@ const STORAGE_KEYS = [
   ...VIEWS.map((view) => VIEW_SETTING_KEYS[view]),
 ];
 
-let section: HTMLElement | null = null;
+let bar: HTMLElement | null = null;
+let observer: MutationObserver | null = null;
 let inFlight = false;
 let halted = false;
 let errorMessage: string | null = null;
@@ -42,10 +49,11 @@ let enabled = DEFAULT_SETTINGS.enabled;
 let threshold = DEFAULT_SETTINGS.threshold;
 let labels: LabelConfig[] = [];
 let labelsVersion = labelsHash([]);
-let lastSignature: string | null = null;
 let debounceId: number | undefined;
 let generation = 0;
 let retryId: number | undefined;
+let currentList: HTMLElement | null = null;
+let orderList: HTMLElement | null = null;
 
 const viewEnabled: Record<View, boolean> = {
   inbox: DEFAULT_SETTINGS.viewInbox,
@@ -55,6 +63,7 @@ const viewEnabled: Record<View, boolean> = {
 };
 
 const candidates = new Map<string, Entry>();
+const orderIndex = new Map<string, number>();
 
 function schedule(): void {
   clearTimeout(debounceId);
@@ -179,26 +188,131 @@ function recordFailure(entry: Entry): void {
     Date.now() + Math.min(BASE_BACKOFF_MS * 2 ** (entry.failureCount - 1), MAX_BACKOFF_MS);
 }
 
-function isOwnRecord(record: MutationRecord): boolean {
-  if (section === null) return false;
-  if (record.target === section || section.contains(record.target)) return true;
-  for (const node of [...record.addedNodes, ...record.removedNodes]) {
-    if (node === section || section.contains(node)) return true;
+function isGcNode(node: Node): boolean {
+  if (!(node instanceof Element)) return false;
+  for (const className of node.classList) {
+    if (className.startsWith('gc-')) return true;
   }
-  return false;
+  return node.closest('.gc-root, .gc-chips') !== null;
+}
+
+function isOwnRecord(record: MutationRecord): boolean {
+  if (bar !== null && (record.target === bar || bar.contains(record.target))) return true;
+  const nodes = [...record.addedNodes, ...record.removedNodes];
+  if (nodes.length === 0) return false;
+  return nodes.every(isGcNode);
+}
+
+function rowThreadId(row: HTMLTableRowElement): string | null {
+  const carrier = row.querySelector('[data-thread-id]');
+  return carrier?.getAttribute('data-thread-id') ?? null;
+}
+
+function recordOrder(list: HTMLElement): void {
+  const rows = [...list.querySelectorAll<HTMLTableRowElement>('tr.zA')];
+  const ids = rows.map((row) => rowThreadId(row));
+  const known = new Set(orderIndex.keys());
+  for (let i = 0; i < rows.length; i++) {
+    const id = ids[i];
+    if (id === null || known.has(id)) continue;
+    let prev: number | undefined;
+    for (let j = i - 1; j >= 0 && prev === undefined; j--) {
+      const other = ids[j];
+      if (other === null || !known.has(other)) continue;
+      prev = orderIndex.get(other);
+    }
+    let next: number | undefined;
+    for (let j = i + 1; j < rows.length && next === undefined; j++) {
+      const other = ids[j];
+      if (other === null || !known.has(other)) continue;
+      next = orderIndex.get(other);
+    }
+    if (prev === undefined && next === undefined) orderIndex.set(id, 0);
+    else if (prev === undefined) orderIndex.set(id, (next as number) - 1);
+    else if (next === undefined) orderIndex.set(id, prev + 1);
+    else orderIndex.set(id, (prev + next) / 2);
+    known.add(id);
+  }
+}
+
+function applyOrder(rows: HTMLTableRowElement[]): void {
+  if (rows.length === 0) return;
+  const parent = rows[0].parentElement;
+  if (parent === null) return;
+  const targets = rows.filter((row) => row.parentElement === parent);
+  let ref = parent.firstElementChild;
+  for (const row of targets) {
+    if (row === ref) {
+      ref = ref.nextElementSibling;
+    } else {
+      parent.insertBefore(row, ref);
+    }
+  }
+}
+
+function applyRowOrder(): void {
+  const list = currentList;
+  if (list === null) return;
+  const entryByRow = new Map<HTMLTableRowElement, Entry>();
+  for (const entry of candidates.values()) entryByRow.set(entry.row, entry);
+  const tracked: Tracked[] = [];
+  for (const row of list.querySelectorAll<HTMLTableRowElement>('tr.zA')) {
+    const id = rowThreadId(row);
+    if (id === null) continue;
+    const index = orderIndex.get(id);
+    if (index === undefined) continue;
+    tracked.push({ row, index, entry: entryByRow.get(row) });
+  }
+  const critical: Tracked[] = [];
+  const unread: Tracked[] = [];
+  const read: Tracked[] = [];
+  for (const item of tracked) {
+    if (item.entry === undefined) read.push(item);
+    else if (isCritical(item.entry)) critical.push(item);
+    else unread.push(item);
+  }
+  critical.sort((a, b) => {
+    const entryA = a.entry;
+    const entryB = b.entry;
+    if (entryA === undefined || entryB === undefined) return 0;
+    return compareEntries(entryA, entryB);
+  });
+  unread.sort((a, b) => a.index - b.index);
+  read.sort((a, b) => a.index - b.index);
+  applyOrder([...critical, ...unread, ...read].map((item) => item.row));
+}
+
+function restoreList(list: HTMLElement | null): void {
+  if (list === null) return;
+  const tracked: Tracked[] = [];
+  for (const row of list.querySelectorAll<HTMLTableRowElement>('tr.zA')) {
+    const id = rowThreadId(row);
+    if (id === null) continue;
+    const index = orderIndex.get(id);
+    if (index === undefined) continue;
+    tracked.push({ row, index, entry: undefined });
+  }
+  tracked.sort((a, b) => a.index - b.index);
+  applyOrder(tracked.map((item) => item.row));
+  for (const slot of list.querySelectorAll('span.gc-chips')) slot.remove();
+  observer?.takeRecords();
 }
 
 async function sync(): Promise<void> {
   const view = currentView();
-  if (!enabled || view === null || !viewEnabled[view]) {
-    removeSection();
-    candidates.clear();
-    return;
-  }
   const list = visibleList();
-  if (!list) {
-    removeSection();
+  if (list !== orderList) {
+    restoreList(orderList);
+    orderList = list ?? null;
+    orderIndex.clear();
+  }
+  if (!enabled || view === null || !viewEnabled[view] || !list) {
+    restoreList(orderList);
+    orderList = null;
+    orderIndex.clear();
+    removeBar();
     candidates.clear();
+    currentList = null;
     return;
   }
   const seen = new Set<string>();
@@ -207,8 +321,9 @@ async function sync(): Promise<void> {
     const state = extractState(el);
     if (!state) continue;
     const key = threadKey(state, labelsVersion);
-    const entry = candidates.get(key) ?? { key, state, failureCount: 0, nextAttemptAt: 0 };
+    const entry = candidates.get(key) ?? { key, state, row: el, failureCount: 0, nextAttemptAt: 0 };
     entry.state = state;
+    entry.row = el;
     next.set(key, entry);
     seen.add(key);
   }
@@ -218,36 +333,39 @@ async function sync(): Promise<void> {
   candidates.clear();
   for (const [key, entry] of next.entries()) candidates.set(key, entry);
 
-  ensureSection(list);
+  recordOrder(list);
+  currentList = list;
+  ensureBar(list);
   render();
   await dispatchPending();
   render();
 }
 
-function removeSection(): void {
-  section?.remove();
-  section = null;
-  lastSignature = null;
+function removeBar(): void {
+  bar?.remove();
+  bar = null;
   clearRetry();
+  observer?.takeRecords();
 }
 
-function ensureSection(list: HTMLElement): void {
+function ensureBar(list: HTMLElement): void {
   const parent = list.parentElement;
   if (!parent) {
-    removeSection();
+    removeBar();
     return;
   }
-  if (section !== null && !section.isConnected) section = null;
-  if (section !== null && section.parentElement === parent && section.nextElementSibling === list) {
+  if (bar !== null && !bar.isConnected) bar = null;
+  if (bar !== null && bar.parentElement === parent && bar.nextElementSibling === list) {
     return;
   }
-  if (section === null) {
+  if (bar === null) {
     const root = document.createElement('div');
     root.className = 'gc-root';
     root.id = 'gc-unread';
-    section = root;
+    bar = root;
   }
-  parent.insertBefore(section, list);
+  parent.insertBefore(bar, list);
+  observer?.takeRecords();
 }
 
 async function dispatchPending(): Promise<void> {
@@ -334,117 +452,103 @@ function compareEntries(a: Entry, b: Entry): number {
   return pb - pa;
 }
 
-function renderSignature(entries: Entry[]): string {
-  const parts = entries.map((entry) => {
-    const classification = entry.classification;
-    if (classification === undefined) return `${entry.key}?${entry.failureCount}`;
-    return `${entry.key}=${classification.criticalProbability},${classification.urgencyScore},${JSON.stringify(classification.labels)}`;
-  });
-  return [threshold, labelsVersion, inFlight, errorMessage ?? '', ...parts].join('|');
+function renderBar(): void {
+  if (bar === null) return;
+  const total = candidates.size;
+  const pending = pendingCount();
+  const status = inFlight && pending > 0 ? pending : 0;
+  const signature = `${total}|${status}|${errorMessage ?? ''}`;
+  if (bar.dataset.gcSig === signature) return;
+  bar.dataset.gcSig = signature;
+  bar.textContent = '';
+  const count = document.createElement('span');
+  count.className = 'gc-count';
+  count.textContent = `${total} unread`;
+  bar.appendChild(count);
+  if (status > 0) {
+    const statusEl = document.createElement('span');
+    statusEl.className = 'gc-status';
+    statusEl.textContent = `classifying ${status}...`;
+    bar.appendChild(statusEl);
+  }
+  if (errorMessage) {
+    const err = document.createElement('span');
+    err.className = 'gc-error';
+    err.textContent = errorMessage;
+    bar.appendChild(err);
+  }
 }
 
-function itemElement(entry: Entry): HTMLElement {
+function chipSlot(row: HTMLTableRowElement): HTMLElement | null {
+  const existing = row.querySelector<HTMLElement>('span.gc-chips');
+  if (existing) return existing;
+  const container = row.querySelector('.y6');
+  const subject =
+    row.querySelector('span.bog') ?? row.querySelector('span.bqe[data-thread-id]');
+  const slot = document.createElement('span');
+  slot.className = 'gc-chips';
+  if (container !== null) container.insertBefore(slot, container.firstChild);
+  else if (subject?.parentElement != null) subject.parentElement.insertBefore(slot, subject);
+  else return null;
+  return slot;
+}
+
+function chipSignature(entry: Entry): string {
   const classification = entry.classification;
-  const itemEl = document.createElement('div');
-  itemEl.className = 'gc-item';
-
-  const top = document.createElement('div');
-  top.className = 'gc-top';
-  const from = document.createElement('span');
-  from.className = 'gc-from';
-  from.textContent = entry.state.fromName;
-  top.appendChild(from);
-
-  if (isCritical(entry)) {
-    const badge = document.createElement('span');
-    badge.className = 'gc-badge';
-    badge.textContent = 'Critical';
-    top.appendChild(badge);
+  if (classification === undefined) return `p:${entry.failureCount}`;
+  let signature = `c:${isCritical(entry)}|${threshold}|${labelsVersion}|`;
+  for (const label of labels) {
+    const probability = classification.labels[label.id];
+    if (probability === undefined || probability < threshold) continue;
+    signature += `${label.id}:${probability},`;
   }
+  return signature;
+}
 
-  if (classification === undefined) {
-    const marker = document.createElement('span');
-    marker.className = 'gc-pending';
-    marker.textContent = entry.failureCount > 0 ? 'retrying' : 'classifying';
-    top.appendChild(marker);
-  } else {
+function renderChips(): void {
+  const list = currentList;
+  if (list === null) return;
+  for (const stale of list.querySelectorAll('tr.zA:not(.zE) span.gc-chips')) stale.remove();
+  for (const entry of candidates.values()) {
+    if (!entry.row.isConnected) continue;
+    const slot = chipSlot(entry.row);
+    if (slot === null) continue;
+    const signature = chipSignature(entry);
+    if (slot.dataset.gcSig === signature) continue;
+    slot.dataset.gcSig = signature;
+    slot.textContent = '';
+    const classification = entry.classification;
+    if (classification === undefined) {
+      const pending = document.createElement('span');
+      pending.className = 'gc-pending';
+      pending.textContent = entry.failureCount > 0 ? 'retrying' : 'classifying';
+      slot.appendChild(pending);
+      continue;
+    }
+    if (isCritical(entry)) {
+      const badge = document.createElement('span');
+      badge.className = 'gc-badge';
+      badge.textContent = 'Critical';
+      slot.appendChild(badge);
+    }
     for (let index = 0; index < labels.length; index++) {
       const label = labels[index];
       const probability = classification.labels[label.id];
       if (probability === undefined || probability < threshold) continue;
       const chip = document.createElement('span');
-      chip.className = `gc-chip gc-chip-${index % CHIP_COLORS}`;
+      chip.className = `gc-chip gc-hue-${index % CHIP_HUES}`;
       chip.textContent = label.name;
-      top.appendChild(chip);
+      slot.appendChild(chip);
     }
   }
-
-  const date = document.createElement('span');
-  date.className = 'gc-date';
-  date.textContent = entry.state.date;
-  top.appendChild(date);
-  itemEl.appendChild(top);
-
-  const subject = document.createElement('div');
-  subject.className = 'gc-subject';
-  subject.textContent = entry.state.subject;
-  itemEl.appendChild(subject);
-
-  const snippet = document.createElement('div');
-  snippet.className = 'gc-snippet';
-  snippet.textContent = entry.state.snippet;
-  itemEl.appendChild(snippet);
-
-  itemEl.addEventListener('click', () => {
-    location.hash = threadHash(location.hash, entry.state.legacyThreadId);
-  });
-  return itemEl;
 }
 
 function render(): void {
-  if (section === null) return;
-  const entries = [...candidates.values()];
-  const critical: Entry[] = [];
-  const rest: Entry[] = [];
-  for (const entry of entries) {
-    if (isCritical(entry)) critical.push(entry);
-    else rest.push(entry);
-  }
-  critical.sort(compareEntries);
-
-  const signature = renderSignature(entries);
-  if (signature === lastSignature) return;
-  lastSignature = signature;
-
-  section.textContent = '';
-  const header = document.createElement('div');
-  header.className = 'gc-header';
-  const title = document.createElement('span');
-  title.className = 'gc-title';
-  title.textContent = 'Unread';
-  header.appendChild(title);
-  const countEl = document.createElement('span');
-  countEl.className = 'gc-count';
-  countEl.textContent = String(entries.length);
-  header.appendChild(countEl);
-  section.appendChild(header);
-
-  const pending = pendingCount();
-  if (inFlight && pending > 0) {
-    const status = document.createElement('div');
-    status.className = 'gc-status';
-    status.textContent = `classifying ${pending}...`;
-    section.appendChild(status);
-  }
-  if (errorMessage) {
-    const err = document.createElement('div');
-    err.className = 'gc-error';
-    err.textContent = errorMessage;
-    section.appendChild(err);
-  }
-
-  for (const entry of critical) section.appendChild(itemElement(entry));
-  for (const entry of rest) section.appendChild(itemElement(entry));
+  if (bar === null) return;
+  renderBar();
+  renderChips();
+  applyRowOrder();
+  observer?.takeRecords();
 }
 
 async function bootstrap(): Promise<void> {
@@ -458,7 +562,7 @@ async function bootstrap(): Promise<void> {
     const storedValue = stored[key];
     if (typeof storedValue === 'boolean') viewEnabled[view] = storedValue;
   }
-  const observer = new MutationObserver((records) => {
+  observer = new MutationObserver((records) => {
     if (records.every(isOwnRecord)) return;
     schedule();
   });

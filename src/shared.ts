@@ -144,10 +144,3 @@ export function viewFromHash(hash: string): View | null {
   if (head === 'search' || head === 'advanced-search') return 'search';
   return 'other';
 }
-
-export function threadHash(hash: string, legacyThreadId: string): string {
-  const { raw, decoded } = parseHash(hash);
-  const index = threadIndex(decoded);
-  const list = index === -1 ? raw : raw.slice(0, index);
-  return list.length > 0 ? `#${list.join('/')}/${legacyThreadId}` : `#inbox/${legacyThreadId}`;
-}
