@@ -49,6 +49,12 @@
         margin-left: 8px;
         color: #188038;
       }
+      .label-error {
+        display: block;
+        margin-top: 6px;
+        font-size: 11px;
+        color: #d93025;
+      }
       .toggle-row {
         display: flex;
         align-items: center;
@@ -99,6 +105,7 @@
     <div id="labels"></div>
     <button id="addLabel" type="button">Add label</button>
     <button id="saveLabels" type="button">Save labels</button>
+    <span id="labelError" class="label-error"></span>
     <p class="row-label" style="margin-top: 12px">Cache holds past classifications.</p>
     <button id="clear">Clear cache</button>
     <span id="saved">Saved</span>

@@ -16,6 +16,7 @@ const saved = document.getElementById('saved') as HTMLSpanElement;
 const labelsEl = document.getElementById('labels') as HTMLDivElement;
 const addLabel = document.getElementById('addLabel') as HTMLButtonElement;
 const saveLabels = document.getElementById('saveLabels') as HTMLButtonElement;
+const labelError = document.getElementById('labelError') as HTMLSpanElement;
 
 const viewInputs: Record<string, HTMLInputElement> = {
   viewInbox: document.getElementById('viewInbox') as HTMLInputElement,
@@ -120,11 +121,17 @@ addLabel.addEventListener('click', () => {
   renderLabels();
 });
 saveLabels.addEventListener('click', () => {
-  const savedLabels = draft
-    .map(({ id, name, description }) => ({ id, name: name.trim(), description: description.trim() }))
-    .filter((label) => label.name.length > 0 && label.description.length > 0)
-    .slice(0, MAX_LABELS);
-  void chrome.storage.local.set({ labels: savedLabels }).then(showSaved);
+  const savedLabels = draft.map(({ id, name, description }) => ({
+    id,
+    name: name.trim(),
+    description: description.trim(),
+  }));
+  if (savedLabels.some((label) => label.name.length === 0 || label.description.length === 0)) {
+    labelError.textContent = 'Each label needs a name and a description.';
+    return;
+  }
+  labelError.textContent = '';
+  void chrome.storage.local.set({ labels: savedLabels.slice(0, MAX_LABELS) }).then(showSaved);
 });
 clear.addEventListener('click', () => {
   void (async () => {

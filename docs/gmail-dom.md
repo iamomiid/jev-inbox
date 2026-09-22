@@ -37,14 +37,16 @@ Each view has a setting, in the popup under "Show on": `viewInbox` (on), `viewTa
 - The header reads `Unread` with the count of unread rows in the visible list. Every row renders as soon as it is found, before classification, with a small `classifying` marker (or `retrying` after a failed attempt); items re-sort as classifications arrive.
 - Order: critical rows first, where critical means `criticalProbability` at or above the threshold setting, sorted by urgency score descending then critical probability descending. Then every other row, unclassified and failed rows included, in Gmail's own order.
 - Each item shows the sender name, the subject, the snippet, and the date, plus a `Critical` badge on critical rows and one chip per label whose probability is at or above the threshold. Chip color comes from a fixed eight-color palette indexed by the label's position in the settings list.
-- The labels themselves live in `chrome.storage.local` as `labels: { id, name, description }[]`, edited in the popup, capped at 15. Changes apply live.
+- The labels themselves live in `chrome.storage.local` as `labels: { id, name, description }[]`, edited in the popup, capped at 15. Changes apply live. A label with an empty name or description is not saved; the popup shows an inline message and keeps the previous set.
 - `render()` writes nothing when the ordered keys, classification state, threshold, label version, in-flight state, and error text are unchanged, and the mutation observer ignores records inside the section or carrying the section node, so rendering cannot drive itself.
 
 ## Classify flow
 
 - The content script sends `{ type: 'classify', emails, labels }` to the service worker and receives `{ ok: true, results, errors }` or `{ ok: false, error }`. Results are keyed by thread id plus last message id plus the labels hash.
+- Batches of 20 rows go out one at a time, at most one dispatch in flight. Before each batch and after each response the loop checks that the extension is still enabled, the view is still on, the visible list node is unchanged, and the generation counter has not moved. The counter moves on `hashchange` and on any storage change to `enabled`, `labels`, or a view toggle, so a result that arrives after a navigation, a disable, or a label edit is dropped.
 - Cache: `crit:` prefixed entries in `chrome.storage.local`. Editing labels changes the hash, so the visible rows reclassify; old entries stay until "Clear cache" removes them.
-- A failed row backs off: 60 s after the first failure, doubling per consecutive failure up to 10 min. A 401 or 403, or a missing key, stops all requests until the `apiKey` setting changes.
+- Concurrent misses for the same cache key share one evaluate call. The worker rechecks storage before starting, reuses an in-flight promise, and drops the entry when the promise settles, so a failure is never cached.
+- A failed row backs off: 60 s after the first failure, doubling per consecutive failure up to 10 min. After each dispatch the content script arms one timer for the earliest pending retry, replaces it on the next dispatch, and clears it when the section is removed, the extension is disabled, or the view is off. A 401 or 403 on any row stops the whole batch: no worker dequeues further emails, calls already in flight may finish, and the content script halts until the `apiKey` setting changes. A missing key halts the same way.
 
 ## When Gmail changes
 

@@ -44,6 +44,8 @@ let labels: LabelConfig[] = [];
 let labelsVersion = labelsHash([]);
 let lastSignature: string | null = null;
 let debounceId: number | undefined;
+let generation = 0;
+let retryId: number | undefined;
 
 const viewEnabled: Record<View, boolean> = {
   inbox: DEFAULT_SETTINGS.viewInbox,
@@ -60,6 +62,40 @@ function schedule(): void {
     debounceId = undefined;
     void sync();
   }, DEBOUNCE_MS);
+}
+
+function clearRetry(): void {
+  if (retryId !== undefined) {
+    clearTimeout(retryId);
+    retryId = undefined;
+  }
+}
+
+function armRetry(): void {
+  clearRetry();
+  if (halted || !dispatchAllowed()) return;
+  const now = Date.now();
+  let earliest: number | undefined;
+  for (const entry of candidates.values()) {
+    if (entry.classification !== undefined) continue;
+    if (earliest === undefined || entry.nextAttemptAt < earliest) earliest = entry.nextAttemptAt;
+  }
+  if (earliest === undefined) return;
+  retryId = window.setTimeout(() => {
+    retryId = undefined;
+    void dispatchPending();
+  }, Math.max(0, earliest - now));
+}
+
+function dispatchAllowed(): boolean {
+  const view = currentView();
+  return enabled && view !== null && viewEnabled[view];
+}
+
+function canDispatch(startedGeneration: number, startedList: HTMLElement | undefined): boolean {
+  if (startedGeneration !== generation) return false;
+  if (!dispatchAllowed()) return false;
+  return visibleList() === startedList;
 }
 
 function visibleMain(): HTMLElement | undefined {
@@ -192,6 +228,7 @@ function removeSection(): void {
   section?.remove();
   section = null;
   lastSignature = null;
+  clearRetry();
 }
 
 function ensureSection(list: HTMLElement): void {
@@ -214,12 +251,22 @@ function ensureSection(list: HTMLElement): void {
 }
 
 async function dispatchPending(): Promise<void> {
-  if (inFlight || halted) return;
-  if (dispatchableEntries().length === 0) return;
+  if (inFlight) return;
+  if (halted || !dispatchAllowed()) {
+    clearRetry();
+    return;
+  }
+  if (dispatchableEntries().length === 0) {
+    armRetry();
+    return;
+  }
   inFlight = true;
   errorMessage = null;
+  const startedGeneration = generation;
+  const startedList = visibleList();
   const attempted = new Set<string>();
   while (true) {
+    if (!canDispatch(startedGeneration, startedList)) break;
     const batch = dispatchableEntries()
       .filter((entry) => !attempted.has(entry.key))
       .slice(0, BATCH_SIZE);
@@ -233,10 +280,12 @@ async function dispatchPending(): Promise<void> {
         labels,
       });
     } catch {
+      if (!canDispatch(startedGeneration, startedList)) break;
       errorMessage = 'Classification request failed.';
       for (const entry of batch) recordFailure(entry);
       break;
     }
+    if (!canDispatch(startedGeneration, startedList)) break;
     if (!response.ok) {
       errorMessage =
         response.error === 'missing_key'
@@ -272,6 +321,8 @@ async function dispatchPending(): Promise<void> {
     render();
   }
   inFlight = false;
+  render();
+  armRetry();
 }
 
 function compareEntries(a: Entry, b: Entry): number {
@@ -412,8 +463,12 @@ async function bootstrap(): Promise<void> {
     schedule();
   });
   observer.observe(document.documentElement, { childList: true, subtree: true });
-  window.addEventListener('hashchange', schedule);
+  window.addEventListener('hashchange', () => {
+    generation += 1;
+    schedule();
+  });
   chrome.storage.onChanged.addListener((changes) => {
+    let structural = false;
     if (changes.apiKey) {
       halted = false;
       for (const entry of candidates.values()) {
@@ -426,8 +481,12 @@ async function bootstrap(): Promise<void> {
       labels = Array.isArray(value) ? value.filter(isLabelConfig) : [];
       labelsVersion = labelsHash(labels);
       candidates.clear();
+      structural = true;
     }
-    if (changes.enabled) enabled = changes.enabled.newValue !== false;
+    if (changes.enabled) {
+      enabled = changes.enabled.newValue !== false;
+      structural = true;
+    }
     if (changes.threshold && typeof changes.threshold.newValue === 'number') {
       threshold = changes.threshold.newValue;
     }
@@ -437,7 +496,9 @@ async function bootstrap(): Promise<void> {
       if (!change) continue;
       viewEnabled[view] =
         typeof change.newValue === 'boolean' ? change.newValue : DEFAULT_SETTINGS[key];
+      structural = true;
     }
+    if (structural) generation += 1;
     schedule();
   });
   void sync();
