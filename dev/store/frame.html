@@ -1,0 +1,407 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Jev Inbox store image</title>
+    <link rel="stylesheet" href="store.css" />
+    <link rel="stylesheet" href="../../dist/section.css" />
+    <style>
+      .list-root {
+        --page-bg: #ffffff;
+        --page-text: #202124;
+        --page-muted: #5f6368;
+        --page-line: #e8eaed;
+        --page-hover: #f6f8fc;
+        width: 100%;
+        background: var(--page-bg);
+        color: var(--page-text);
+        font-size: 13px;
+      }
+      .list-root.dark {
+        --page-bg: #202124;
+        --page-text: #e8eaed;
+        --page-muted: #9aa0a6;
+        --page-line: #3c4043;
+        --page-hover: #2a2b2e;
+      }
+      .list-root .gc-root {
+        padding-left: 16px;
+        padding-right: 16px;
+        font-size: 12px;
+      }
+      .list-root table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      .list-root tr.zA {
+        border-bottom: 1px solid var(--page-line);
+      }
+      .list-root td {
+        padding: 9px 16px;
+        vertical-align: top;
+      }
+      .list-root td.xY {
+        width: 168px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .list-root td.xW {
+        width: 64px;
+        text-align: right;
+        color: var(--page-muted);
+        font-size: 12px;
+      }
+      .list-root tr.zA.zE {
+        font-weight: 700;
+      }
+      .list-root .y2 {
+        display: block;
+        margin-top: 2px;
+        color: var(--page-muted);
+        font-weight: 400;
+      }
+      .list-root .y2 .Zt {
+        display: none;
+      }
+      [data-scene] {
+        display: none;
+      }
+      [data-scene].active {
+        display: flex;
+      }
+    </style>
+  </head>
+  <body>
+    <section data-scene="unread-first" class="canvas">
+      <div class="panel">
+        <div class="brand">
+          <img src="../../assets/icon.svg" alt="" />
+          <span>Jev Inbox</span>
+        </div>
+        <h1 class="headline">Unread first.<br />Critical on top.</h1>
+        <p class="subline">
+          Gmail's own list, reordered in place. The messages that matter most rise above the rest.
+        </p>
+      </div>
+      <div class="stage">
+        <div class="window">
+          <div class="window-bar">
+            <div class="window-dots"><span></span><span></span><span></span></div>
+            <div class="window-address">mail.example.com/inbox</div>
+          </div>
+          <div class="mail-topbar">
+            <svg class="app-icon" viewBox="0 0 24 24" fill="none" stroke="#57606a" stroke-width="1.6">
+              <rect x="3" y="5" width="18" height="14" rx="2" />
+              <path d="M3 7l9 6 9-6" />
+            </svg>
+            <span class="app-name">Mail</span>
+            <div class="search"></div>
+            <div class="avatar"></div>
+          </div>
+          <div class="list-root" id="listUnreadFirst"></div>
+        </div>
+      </div>
+    </section>
+
+    <section data-scene="dark-theme" class="canvas dark">
+      <div class="panel">
+        <div class="brand">
+          <img src="../../assets/icon.svg" alt="" />
+          <span>Jev Inbox</span>
+        </div>
+        <h1 class="headline">Follows Gmail's theme.</h1>
+        <p class="subline">Light or dark, the reordered list and the chips match, automatically.</p>
+      </div>
+      <div class="stage">
+        <div class="window">
+          <div class="window-bar">
+            <div class="window-dots"><span></span><span></span><span></span></div>
+            <div class="window-address">mail.example.com/inbox</div>
+          </div>
+          <div class="mail-topbar">
+            <svg class="app-icon" viewBox="0 0 24 24" fill="none" stroke="#9aa0a6" stroke-width="1.6">
+              <rect x="3" y="5" width="18" height="14" rx="2" />
+              <path d="M3 7l9 6 9-6" />
+            </svg>
+            <span class="app-name">Mail</span>
+            <div class="search"></div>
+            <div class="avatar"></div>
+          </div>
+          <div class="list-root dark" id="listDarkTheme"></div>
+        </div>
+      </div>
+    </section>
+
+    <section data-scene="your-labels" class="canvas">
+      <div class="panel">
+        <div class="brand">
+          <img src="../../assets/icon.svg" alt="" />
+          <span>Jev Inbox</span>
+        </div>
+        <h1 class="headline">Your labels, described in plain words.</h1>
+        <p class="subline">Name a label, describe what belongs under it. Jev answers one question per label.</p>
+      </div>
+      <div class="stage" style="position: relative;">
+        <div class="window">
+          <div class="window-bar">
+            <div class="window-dots"><span></span><span></span><span></span></div>
+            <div class="window-address">mail.example.com/inbox</div>
+          </div>
+          <div class="mail-topbar">
+            <svg class="app-icon" viewBox="0 0 24 24" fill="none" stroke="#57606a" stroke-width="1.6">
+              <rect x="3" y="5" width="18" height="14" rx="2" />
+              <path d="M3 7l9 6 9-6" />
+            </svg>
+            <span class="app-name">Mail</span>
+            <div class="search"></div>
+            <div class="toolbar-dot"><img src="../../assets/icon.svg" alt="" /></div>
+            <div class="avatar"></div>
+          </div>
+          <div class="list-root" id="listLabels"></div>
+        </div>
+        <div class="popup-card popup-drop" id="popupLabels" style="width: 400px;"></div>
+      </div>
+    </section>
+
+    <section data-scene="privacy" class="canvas">
+      <div class="panel">
+        <div class="brand">
+          <img src="../../assets/icon.svg" alt="" />
+          <span>Jev Inbox</span>
+        </div>
+        <h1 class="headline">Only row metadata.<br />Never bodies.</h1>
+        <p class="subline">You see and accept the notice before anything is sent, ever.</p>
+      </div>
+      <div class="stage" style="gap: 24px; align-items: center;">
+        <div class="popup-card" id="popupPrivacy" style="width: 400px;"></div>
+        <div class="callout" style="width: 260px;">
+          <div class="callout-row">
+            <span class="callout-mark yes">✓</span>
+            <span class="callout-text"
+              ><span class="callout-title">Sent, of unread rows</span
+              ><span class="callout-body">Sender, subject, snippet, date</span></span
+            >
+          </div>
+          <div class="callout-row">
+            <span class="callout-mark no">✕</span>
+            <span class="callout-text"
+              ><span class="callout-title">Never sent</span
+              ><span class="callout-body">Message bodies, attachments, no server of ours</span></span
+            >
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section data-scene="your-key" class="canvas">
+      <div class="panel">
+        <div class="brand">
+          <img src="../../assets/icon.svg" alt="" />
+          <span>Jev Inbox</span>
+        </div>
+        <h1 class="headline">Your provider, your key, your sensitivity.</h1>
+        <p class="subline">
+          Vercel AI Gateway or TypeSafe, with your own key, stored only in this browser.
+        </p>
+      </div>
+      <div class="stage">
+        <div class="popup-card" id="popupKey" style="width: 420px;"></div>
+      </div>
+    </section>
+
+    <script>
+      const rows = [
+        {
+          from: 'Migration Office',
+          email: 'migration@office.example',
+          subject: 'Your residence appointment is Monday at 9:00',
+          snippet: 'Bring the permit letter and your passport.',
+          time: '11:02',
+          unread: true,
+          badge: 'Critical',
+          chips: [{ name: 'Visa', hue: 0 }],
+        },
+        {
+          from: 'Meadow Bank',
+          email: 'statements@meadowbank.example',
+          subject: 'Invoice 128 is due Friday',
+          snippet: 'Pay before Friday to avoid the late fee.',
+          time: '09:48',
+          unread: true,
+          badge: 'Critical',
+          chips: [{ name: 'Money', hue: 1 }],
+        },
+        {
+          from: 'Passport Office',
+          email: 'appointments@passport.example',
+          subject: 'Bring two photos to your appointment',
+          snippet: 'Appointment is Thursday at 10:30.',
+          time: '09:02',
+          unread: true,
+          badge: 'Critical',
+          chips: [{ name: 'Visa', hue: 0 }],
+        },
+        {
+          from: 'Willow Property',
+          email: 'rent@willowproperty.example',
+          subject: 'Rent for October is due on the 1st',
+          snippet: 'Pay through the tenant portal.',
+          time: '11:30',
+          unread: true,
+          chips: [{ name: 'Home', hue: 2 }],
+        },
+        {
+          from: 'City Library',
+          email: 'loans@citylibrary.example',
+          subject: 'Two books are due back',
+          snippet: 'Renew online or return them this week.',
+          time: '10:10',
+          unread: true,
+          chips: [],
+        },
+        {
+          from: 'Plotline Newsletter',
+          email: 'hello@plotline.example',
+          subject: 'Ten tips for balcony tomatoes',
+          snippet: 'Tomatoes grow well in pots.',
+          time: '08:05',
+          unread: true,
+          chips: [],
+        },
+        {
+          from: 'Greenhouse Shop',
+          email: 'orders@greenhouse.example',
+          subject: 'Your order left the warehouse',
+          snippet: 'Tracking number is in the app.',
+          time: '08:40',
+          unread: false,
+        },
+        {
+          from: 'Weather Digest',
+          email: 'digest@weather.example',
+          subject: 'A grey week ahead',
+          snippet: 'Rain on Tuesday and Wednesday.',
+          time: '09:20',
+          unread: false,
+        },
+        {
+          from: 'Ride Sharing',
+          email: 'receipts@rides.example',
+          subject: 'Your Friday ride receipt',
+          snippet: 'Total 12.40, paid with the saved card.',
+          time: '10:35',
+          unread: false,
+        },
+        {
+          from: 'Power Company',
+          email: 'billing@power.example',
+          subject: 'Your monthly usage summary',
+          snippet: 'Usage was 8 percent lower than last month.',
+          time: '11:55',
+          unread: false,
+        },
+      ];
+
+      function renderList(target, rowSubset) {
+        const unreadCount = rowSubset.filter((row) => row.unread).length;
+        const bar = document.createElement('div');
+        bar.className = 'gc-root';
+        bar.id = 'gc-unread';
+        const count = document.createElement('span');
+        count.className = 'gc-count';
+        count.textContent = `${unreadCount} unread`;
+        bar.appendChild(count);
+
+        const table = document.createElement('table');
+        const tbody = document.createElement('tbody');
+        for (const row of rowSubset) {
+          const tr = document.createElement('tr');
+          tr.className = row.unread ? 'zA zE' : 'zA';
+
+          const fromCell = document.createElement('td');
+          fromCell.className = 'xY';
+          const fromSpan = document.createElement('span');
+          fromSpan.className = 'zF';
+          fromSpan.setAttribute('email', row.email);
+          fromSpan.setAttribute('name', row.from);
+          fromSpan.textContent = row.from;
+          fromCell.appendChild(fromSpan);
+
+          const subjectCell = document.createElement('td');
+          const y6 = document.createElement('div');
+          y6.className = 'y6';
+          if (row.unread && (row.badge || (row.chips && row.chips.length > 0))) {
+            const chipsSlot = document.createElement('span');
+            chipsSlot.className = 'gc-chips';
+            if (row.badge) {
+              const badge = document.createElement('span');
+              badge.className = 'gc-badge';
+              badge.textContent = row.badge;
+              chipsSlot.appendChild(badge);
+            }
+            for (const chip of row.chips || []) {
+              const chipEl = document.createElement('span');
+              chipEl.className = `gc-chip gc-hue-${chip.hue}`;
+              chipEl.textContent = chip.name;
+              chipsSlot.appendChild(chipEl);
+            }
+            y6.appendChild(chipsSlot);
+          }
+          const bog = document.createElement('span');
+          bog.className = 'bog';
+          const bqe = document.createElement('span');
+          bqe.className = 'bqe';
+          bqe.textContent = row.subject;
+          bog.appendChild(bqe);
+          y6.appendChild(bog);
+          subjectCell.appendChild(y6);
+          const snippet = document.createElement('span');
+          snippet.className = 'y2';
+          snippet.textContent = row.snippet;
+          subjectCell.appendChild(snippet);
+
+          const timeCell = document.createElement('td');
+          timeCell.className = 'xW';
+          const timeSpan = document.createElement('span');
+          timeSpan.textContent = row.time;
+          timeCell.appendChild(timeSpan);
+
+          tr.appendChild(fromCell);
+          tr.appendChild(subjectCell);
+          tr.appendChild(timeCell);
+          tbody.appendChild(tr);
+        }
+        table.appendChild(tbody);
+        target.appendChild(bar);
+        target.appendChild(table);
+      }
+
+      const full = document.getElementById('listUnreadFirst');
+      if (full) renderList(full, rows);
+      const dark = document.getElementById('listDarkTheme');
+      if (dark) renderList(dark, rows);
+      const compact = document.getElementById('listLabels');
+      if (compact) renderList(compact, rows);
+
+      const params = new URLSearchParams(location.search);
+      const scene = params.get('scene') || 'unread-first';
+      const active = document.querySelector(`[data-scene="${scene}"]`);
+      if (active) active.classList.add('active');
+
+      for (const [id, param] of [
+        ['popupLabels', 'labelsImg'],
+        ['popupPrivacy', 'privacyImg'],
+        ['popupKey', 'keyImg'],
+      ]) {
+        const host = document.getElementById(id);
+        const src = params.get(param);
+        if (host && src) {
+          const img = document.createElement('img');
+          img.src = src;
+          host.appendChild(img);
+        }
+      }
+    </script>
+  </body>
+</html>

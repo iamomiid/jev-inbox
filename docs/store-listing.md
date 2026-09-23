@@ -43,3 +43,15 @@ No other hosts are requested. The extension makes no request to any server of it
 - Authentication information: the provider API key the user pastes is stored locally in `chrome.storage.local` and sent only to that provider as an authorization header. The popup keeps only the last four characters of each key so it can show that a key is saved without reading it back.
 - Personal communications: message metadata of unread rows is sent to the selected provider for classification, together with the user's label names and descriptions as criteria. Message content is not read or sent.
 - Storage and deletion: settings, keys, labels and the classification cache stay in the browser. "Clear cache" deletes cached classifications, which sends the unread rows of the current list through classification again, and removing the extension deletes all of it.
+
+## Images
+
+Built by `npm run store-images` from the sources in `dev/store/`. Screenshots are made-up mail only, no real inbox.
+
+- `docs/store/01-unread-first.png` (1280x800): the store listing's hero screenshot.
+- `docs/store/02-your-labels.png` (1280x800): screenshot 2.
+- `docs/store/03-dark-theme.png` (1280x800): screenshot 3.
+- `docs/store/04-privacy.png` (1280x800): screenshot 4.
+- `docs/store/05-your-key.png` (1280x800): screenshot 5.
+- `docs/store/promo-small.png` (440x280): the small promo tile.
+- `docs/store/promo-marquee.png` (1400x560): the marquee promo tile.

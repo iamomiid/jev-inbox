@@ -9,7 +9,8 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "watch": "node scripts/build.mjs --watch",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "store-images": "npm run build && node scripts/store-images.mjs"
   },
   "dependencies": {
     "@ai-sdk/typesafe-ai": "^3.0.4",

@@ -22,6 +22,7 @@ const runs = [
   entry(['src/background.ts'], 'esm'),
   entry(['src/popup.ts'], 'iife'),
   entry(['dev/demo.ts'], 'iife'),
+  entry(['dev/store/stub.ts'], 'iife'),
 ];
 
 if (watch) {
