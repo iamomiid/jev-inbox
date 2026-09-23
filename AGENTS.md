@@ -18,7 +18,7 @@ Commands:
 - `npm run build`: bundles `src/`, `dev/demo.ts`, and `dev/store/stub.ts` to `dist/` (esbuild) and copies `manifest.json`, `popup.html`, `section.css`, and `assets/`.
 - `npm run watch`: same build, rebuilds on change.
 - `npm run typecheck`: `tsc --noEmit`.
-- `npm run store-images`: runs the build, then `scripts/store-images.mjs`, which renders the Chrome Web Store screenshots and promo tiles into `docs/store/` and regenerates `docs/images/popup-light.png` and `popup-dark.png`.
+- `npm run store-images`: runs the build, then `scripts/store-images.mjs`, which renders the popup states, the five Gmail-window screenshots and the two promo tiles into `docs/store/`.
 
 File map:
 
@@ -31,7 +31,7 @@ File map:
 - `src/section.css`: styles for the status bar, the Critical badge, and the inline label chips, all following Gmail's current theme.
 - `assets/icon.svg`: icon source. `assets/icon-{16,32,48,128}.png` are rendered from it and copied into `dist/assets` by the build.
 - `dev/demo.html` and `dev/demo.ts`: Gmail-like demo list with made-up mail, a stubbed `chrome` API, and canned classifications. Build first, then open the file. `?theme=dark` for the dark list, `?ack=0` for a browser that has not accepted the notice. `fixtures/` stays gitignored.
-- `dev/store/`: sources for the Chrome Web Store screenshots and promo tiles. `store.css` holds the shared browser-chrome mockup, headline panel and popup-card styles. `frame.html` is the parameterized 1280x800 compose page for the five store screenshots, driven by a `scene` query param, with the Gmail-like list authored inline from the same made-up mail as `dev/demo.html`. `promo-small.html` and `promo-marquee.html` are the small and marquee promo tiles. `stub.ts` stubs `chrome.storage` and `chrome.runtime` with a state decoded from a `state` query param, the same technique as `dev/demo.ts`, so the real `dist/popup.html` and `popup.js` render each popup scenario. `scripts/store-images.mjs` injects `stub.js` into a copy of `dist/popup.html`, screenshots each scenario with headless Chrome, and composes the final images; run it with `npm run store-images`.
+- `dev/store/`: sources for the Chrome Web Store images. `scene.html` is the Gmail-like Chrome window, driven by a `scene` query param (`hero`, `labels`, `dark`, `privacy`, `search`) and `nocallout=1` for the clean hero render, with the list authored inline from the same made-up mail as `dev/demo.html`. `promo.html` is the small and marquee promo tile, driven by `size`. `stub.ts` stubs `chrome.storage` and `chrome.runtime` with a state decoded from a `state` query param, the same technique as `dev/demo.ts`, so the real `dist/popup.html` and `popup.js` render the popup scenarios. `scripts/store-images.mjs` injects `stub.js` into a copy of `dist/popup.html`, screenshots the popup states, the five scenes and the clean hero with headless Chrome, and downsizes the 2x renders into `docs/store/`; intermediates land in the gitignored `dev/store/raw/`. Run it with `npm run store-images`.
 
 All work ends on `main` with a commit. No push, no PR, no release without Omid.
 Thinking, strategy, and decisions live outside this repo.

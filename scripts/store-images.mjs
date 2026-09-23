@@ -1,44 +1,61 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(fileURLToPath(import.meta.url), '..', '..');
 const chrome = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+const storeDir = join(root, 'dev', 'store');
+const rawDir = join(storeDir, 'raw');
 const outDir = join(root, 'docs', 'store');
-const workDir = mkdtempSync(join(tmpdir(), 'jev-store-'));
 
-function shoot(url, outPath, width, height, { dark = false, virtualTime = 400 } = {}) {
+function shoot(url, outPath, width, height, { scale = 1, scheme, virtualTime = 400 } = {}) {
   const args = [
     '--headless=new',
     '--disable-gpu',
     '--hide-scrollbars',
+    '--allow-file-access-from-files',
+    `--force-device-scale-factor=${scale}`,
     `--screenshot=${outPath}`,
     `--window-size=${width},${height}`,
     `--virtual-time-budget=${virtualTime}`,
-    `--blink-settings=preferredColorScheme=${dark ? 0 : 1}`,
-    url,
   ];
+  if (scheme) args.push(`--blink-settings=preferredColorScheme=${scheme === 'dark' ? 0 : 1}`);
+  args.push(url);
   execFileSync(chrome, args, { stdio: 'pipe' });
 }
 
+function downsize(src, out, width, height) {
+  execFileSync('magick', [
+    src,
+    '-filter',
+    'Lanczos',
+    '-resize',
+    `${width}x${height}!`,
+    '-background',
+    'white',
+    '-alpha',
+    'remove',
+    '-alpha',
+    'off',
+    '-define',
+    'png:color-type=2',
+    out,
+  ]);
+}
+
 function trimBottom(path, width) {
-  const geometry = execFileSync('magick', [path, '-format', '%@', 'info:']).toString().trim();
-  const match = geometry.match(/^(\d+)x(\d+)\+(\d+)\+(\d+)$/);
-  if (!match) return;
-  const height = Number(match[2]);
-  const y = Number(match[4]);
-  const bottom = y + height + 24;
+  const geometry = execFileSync('magick', [path, '-format', '%@', 'info:'])
+    .toString()
+    .trim()
+    .match(/^(\d+)x(\d+)\+(\d+)\+(\d+)$/);
+  if (!geometry) return;
+  const bottom = Number(geometry[2]) + Number(geometry[4]) + 32;
   execFileSync('magick', [path, '-crop', `${width}x${bottom}+0+0`, '+repage', path]);
 }
 
-function flatten(path) {
-  execFileSync('magick', [path, '-background', 'white', '-alpha', 'remove', '-alpha', 'off', path]);
-}
-
-function encodeState(state) {
-  return Buffer.from(JSON.stringify(state), 'utf8').toString('base64');
+function fileUrl(...segments) {
+  return `file://${join(...segments)}`;
 }
 
 const labels = [
@@ -52,120 +69,57 @@ if (!existsSync(join(root, 'dist', 'popup.js'))) {
   process.exit(1);
 }
 
+mkdirSync(rawDir, { recursive: true });
 mkdirSync(outDir, { recursive: true });
 
 const popupHtml = readFileSync(join(root, 'dist', 'popup.html'), 'utf8');
-const storeHtml = popupHtml.replace(
-  '<script src="popup.js"></script>',
-  '<script src="stub.js"></script>\n    <script src="popup.js"></script>'
-);
 const storeHtmlPath = join(root, 'dist', 'popup-store.html');
-writeFileSync(storeHtmlPath, storeHtml);
+writeFileSync(
+  storeHtmlPath,
+  popupHtml.replace(
+    '<script src="popup.js"></script>',
+    '<script src="stub.js"></script>\n    <script src="popup.js"></script>'
+  )
+);
 
-function popupScenario(name, state, { dark = false } = {}) {
-  const encoded = encodeState(state);
-  const url = `file://${storeHtmlPath}?state=${encoded}`;
-  const raw = join(workDir, `${name}-raw.png`);
-  shoot(url, raw, 380, 1600, { dark, virtualTime: 800 });
-  trimBottom(raw, 380);
-  return raw;
+function popupRender(name, state) {
+  const encoded = Buffer.from(JSON.stringify(state), 'utf8').toString('base64');
+  const out = join(rawDir, `${name}.png`);
+  shoot(`${fileUrl(storeHtmlPath)}?state=${encoded}`, out, 380, 1400, { scale: 2, scheme: 'light', virtualTime: 800 });
+  trimBottom(out, 760);
 }
 
-const labelsPopup = popupScenario('labels', {
-  privacyAck: true,
-  provider: 'gateway',
-  apiKeyHint: '9c4f',
-  threshold: 0.7,
-  labels,
-  crop: 'labels',
+popupRender('popup-set', { privacyAck: true, provider: 'gateway', apiKeyHint: 'a1b2', threshold: 0.7, labels });
+popupRender('popup-firstrun', { privacyAck: false, provider: 'gateway', labels });
+
+const scenes = [
+  ['hero', '01-unread-first'],
+  ['labels', '02-your-labels'],
+  ['dark', '03-dark-theme'],
+  ['privacy', '04-privacy'],
+  ['search', '05-search-and-key'],
+];
+
+for (const [scene, name] of scenes) {
+  const raw = join(rawDir, `${scene}@2x.png`);
+  shoot(`${fileUrl(storeDir, 'scene.html')}?scene=${scene}`, raw, 1440, 900, { scale: 2, virtualTime: 6000 });
+  downsize(raw, join(outDir, `${name}.png`), 1280, 800);
+}
+
+shoot(`${fileUrl(storeDir, 'scene.html')}?scene=hero&nocallout=1`, join(rawDir, 'hero-clean@2x.png'), 1440, 900, {
+  scale: 2,
+  virtualTime: 6000,
 });
 
-const privacyPopup = popupScenario('privacy', {
-  privacyAck: false,
-  provider: 'gateway',
-  apiKeyHint: '',
-  labels: [],
-  crop: 'privacy',
-});
+const promos = [
+  ['small', 'promo-small.png', 440, 280],
+  ['marquee', 'promo-marquee.png', 1400, 560],
+];
 
-const keyPopup = popupScenario('key', {
-  privacyAck: true,
-  provider: 'gateway',
-  apiKeyHint: 'a1b2',
-  threshold: 0.75,
-  labels: [],
-  crop: 'key',
-});
-
-function frameUrl(scene, extra = {}) {
-  const params = new URLSearchParams({ scene, ...extra });
-  return `file://${join(root, 'dev', 'store', 'frame.html')}?${params.toString()}`;
+for (const [size, name, width, height] of promos) {
+  const raw = join(rawDir, `promo-${size}@2x.png`);
+  shoot(`${fileUrl(storeDir, 'promo.html')}?size=${size}`, raw, width, height, { scale: 2, virtualTime: 6000 });
+  downsize(raw, join(outDir, name), width, height);
 }
 
-const only = process.env.STORE_IMAGES_ONLY
-  ? process.env.STORE_IMAGES_ONLY.split(',').map((name) => name.trim())
-  : null;
-
-function finalShot(name, url, width, height, { dark = false } = {}) {
-  if (only && !only.includes(name)) return null;
-  const out = join(outDir, name);
-  shoot(url, out, width, height, { dark, virtualTime: 400 });
-  flatten(out);
-  return out;
-}
-
-finalShot('01-unread-first.png', frameUrl('unread-first'), 1280, 800);
-finalShot('03-dark-theme.png', frameUrl('dark-theme'), 1280, 800, { dark: true });
-finalShot(
-  '02-your-labels.png',
-  frameUrl('your-labels', { labelsImg: `file://${labelsPopup}` }),
-  1280,
-  800
-);
-finalShot(
-  '04-privacy.png',
-  frameUrl('privacy', { privacyImg: `file://${privacyPopup}` }),
-  1280,
-  800
-);
-finalShot('05-your-key.png', frameUrl('your-key', { keyImg: `file://${keyPopup}` }), 1280, 800);
-
-finalShot(
-  'promo-small.png',
-  `file://${join(root, 'dev', 'store', 'promo-small.html')}`,
-  440,
-  280
-);
-finalShot(
-  'promo-marquee.png',
-  `file://${join(root, 'dev', 'store', 'promo-marquee.html')}`,
-  1400,
-  560
-);
-
-const docsImages = join(root, 'docs', 'images');
-for (const [name, dark] of [
-  ['popup-light.png', false],
-  ['popup-dark.png', true],
-]) {
-  if (only && !only.includes(name)) continue;
-  const out = join(docsImages, name);
-  shoot(
-    `file://${storeHtmlPath}?state=${encodeState({
-      privacyAck: true,
-      provider: 'gateway',
-      apiKeyHint: '9c4f',
-      threshold: 0.7,
-      labels,
-    })}`,
-    out,
-    380,
-    1600,
-    { dark, virtualTime: 800 }
-  );
-  trimBottom(out, 380);
-  flatten(out);
-}
-
-rmSync(workDir, { recursive: true, force: true });
-console.log('Store images written to docs/store/, docs/images/ updated.');
+console.log('Store images written to docs/store/.');

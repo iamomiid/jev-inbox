@@ -1,0 +1,44 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Google+Sans+Flex:opsz,wght@6..144,400;6..144,600;6..144,700&display=block" rel="stylesheet">
+<style>
+* { box-sizing: border-box; }
+html, body { margin: 0; overflow: hidden; }
+body { font-family: 'Google Sans Flex', sans-serif; color: #fff; background: linear-gradient(135deg, #4338ca 0%, #4f46e5 45%, #6366f1 100%); position: relative; -webkit-font-smoothing: antialiased; }
+.brand { display: flex; align-items: center; gap: 14px; font-weight: 600; }
+.brand img { border-radius: 22%; box-shadow: 0 0 0 1px rgba(255,255,255,.35), 0 8px 24px rgba(30,27,75,.35); }
+h1 { margin: 0; font-weight: 700; letter-spacing: -1px; line-height: 1.05; }
+p { margin: 0; opacity: .9; line-height: 1.45; }
+.shot { position: absolute; border-radius: 14px; overflow: hidden; box-shadow: 0 40px 90px rgba(20,16,70,.45), 0 0 0 1px rgba(255,255,255,.18); background: #fff; }
+.shot img { display: block; }
+
+.small { width: 440px; height: 280px; }
+.small .wrap { position: absolute; left: 36px; top: 0; bottom: 0; display: flex; flex-direction: column; justify-content: center; gap: 16px; }
+.small .brand { font-size: 26px; }
+.small .brand img { width: 52px; height: 52px; }
+.small h1 { font-size: 34px; }
+
+.marquee { width: 1400px; height: 560px; }
+.marquee .wrap { position: absolute; left: 72px; top: 0; bottom: 0; width: 470px; display: flex; flex-direction: column; justify-content: center; gap: 22px; }
+.marquee .brand { font-size: 22px; }
+.marquee .brand img { width: 44px; height: 44px; }
+.marquee h1 { font-size: 58px; }
+.marquee p { font-size: 20px; }
+.marquee .shot { left: 600px; top: 72px; width: 900px; height: 560px; }
+.marquee .shot img { width: 1440px; margin-left: -244px; margin-top: -88px; }
+</style>
+</head>
+<body>
+<script>
+const size = new URLSearchParams(location.search).get('size');
+document.body.className = size;
+const ICON = '../../assets/icon-128.png';
+document.body.innerHTML = size === 'small'
+  ? `<div class="wrap"><div class="brand"><img src="${ICON}">Jev Inbox</div><h1>Unread first.<br>Critical on top.</h1></div>`
+  : `<div class="wrap"><div class="brand"><img src="${ICON}">Jev Inbox for Gmail</div><h1>Unread first.<br>Critical on top.</h1><p>Your own labels, classified by Jev, right inside the Gmail list you already use.</p></div>
+     <div class="shot"><img src="raw/hero-clean@2x.png"></div>`;
+</script>
+</body>
+</html>

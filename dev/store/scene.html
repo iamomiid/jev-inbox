@@ -1,0 +1,267 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Google+Sans+Flex:opsz,wght@6..144,400;6..144,500;6..144,600;6..144,700&family=Roboto:wght@400;500;700&display=block" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,400,0..1,0&display=block" rel="stylesheet">
+<link rel="stylesheet" href="../../dist/section.css">
+<style>
+:root {
+  --page: #f6f8fc; --panel: #ffffff; --ink: #1f1f1f; --ink2: #444746; --muted: #5f6368;
+  --nav-sel: #d3e3fd; --compose: #c2e7ff; --search: #e9eef6; --read: #f2f6fc; --line: rgba(100,121,143,.12);
+  --tabline: #0b57d0; --tabs-strip: #dfe3e7; --tab-active: #ffffff; --omnibox: #eef1f4; --toolbar: #ffffff;
+}
+.dark {
+  --page: #111111; --panel: #1e1e1e; --ink: #e3e3e3; --ink2: #c4c7c5; --muted: #9aa0a6;
+  --nav-sel: #3b3f45; --compose: #3a4a5c; --search: #2a2a2a; --read: #181818; --line: rgba(255,255,255,.07);
+  --tabline: #a8c7fa; --tabs-strip: #1a1a1a; --tab-active: #2b2b2b; --omnibox: #1e1e1e; --toolbar: #2b2b2b;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; width: 1440px; height: 900px; overflow: hidden; background: var(--page); }
+body { font-family: 'Google Sans Flex', Roboto, sans-serif; color: var(--ink); -webkit-font-smoothing: antialiased; }
+.ms { font-family: 'Material Symbols Outlined'; font-weight: normal; font-style: normal; font-size: 20px; line-height: 1; display: inline-block; font-variation-settings: 'FILL' 0, 'wght' 400, 'opsz' 20; color: var(--ink2); }
+
+.tabs { height: 40px; background: var(--tabs-strip); display: flex; align-items: flex-end; padding-left: 78px; position: relative; }
+.lights { position: absolute; left: 14px; top: 14px; display: flex; gap: 8px; }
+.lights i { width: 12px; height: 12px; border-radius: 50%; display: block; }
+.tab { height: 34px; width: 250px; background: var(--tab-active); border-radius: 10px 10px 0 0; display: flex; align-items: center; gap: 8px; padding: 0 12px; font-size: 12px; color: var(--ink); }
+.tab .t { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tab .x { font-size: 14px; color: var(--muted); }
+.newtab { margin: 0 0 8px 10px; font-size: 18px; color: var(--muted); }
+.toolbar { height: 44px; background: var(--toolbar); display: flex; align-items: center; gap: 6px; padding: 0 10px; border-bottom: 1px solid var(--line); }
+.toolbar .ms { font-size: 20px; width: 30px; text-align: center; color: var(--ink2); }
+.omni { flex: 1; height: 34px; border-radius: 17px; background: var(--omnibox); display: flex; align-items: center; gap: 10px; padding: 0 14px; font-size: 14px; color: var(--ink); margin: 0 8px; }
+.omni .ms { font-size: 18px; width: auto; }
+.omni .host { color: var(--ink); }
+.omni .path { color: var(--muted); }
+.ext { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; }
+.ext.on { background: color-mix(in srgb, var(--ink) 10%, transparent); }
+.ext img { width: 18px; height: 18px; }
+.pfp { width: 26px; height: 26px; border-radius: 50%; background: #7b61c9; color: #fff; display: grid; place-items: center; font-size: 13px; font-weight: 600; margin: 0 4px; }
+
+.gm { height: 816px; display: grid; grid-template-columns: 256px 1fr; grid-template-rows: 64px 1fr; }
+.gh { grid-column: 1 / 3; display: flex; align-items: center; padding: 0 16px 0 8px; }
+.gh .menu { width: 48px; height: 48px; display: grid; place-items: center; }
+.gh .menu .ms { font-size: 24px; }
+.logo { display: flex; align-items: center; gap: 6px; width: 200px; padding-left: 4px; }
+.logo span { font-size: 22px; color: var(--ink2); letter-spacing: -.2px; }
+.search { width: 720px; height: 48px; border-radius: 24px; background: var(--search); display: flex; align-items: center; padding: 0 8px; gap: 8px; margin-left: 30px; }
+.search .ms { font-size: 24px; width: 40px; text-align: center; }
+.search .q { flex: 1; font-size: 16px; color: var(--ink2); }
+.search .q.filled { color: var(--ink); }
+.gh .right { margin-left: auto; display: flex; align-items: center; gap: 4px; }
+.gh .right .ms { font-size: 24px; width: 40px; text-align: center; }
+.gh .right .pfp { width: 32px; height: 32px; font-size: 15px; margin-left: 10px; }
+.status-pill { display: flex; align-items: center; gap: 6px; border: 1px solid color-mix(in srgb, var(--ink) 25%, transparent); border-radius: 18px; padding: 6px 12px; font-size: 13px; margin-right: 6px; color: var(--ink2); }
+.status-pill i { width: 8px; height: 8px; border-radius: 50%; background: #1e8e3e; display: block; }
+
+nav { padding-right: 16px; }
+.compose { margin: 8px 0 16px 8px; height: 56px; width: 142px; border-radius: 16px; background: var(--compose); display: flex; align-items: center; gap: 12px; padding: 0 20px; font-size: 14px; font-weight: 500; color: var(--ink); }
+.compose .ms { font-size: 24px; color: var(--ink); }
+.ni { height: 32px; border-radius: 0 16px 16px 0; display: flex; align-items: center; gap: 18px; padding: 0 12px 0 26px; font-size: 14px; color: var(--ink); }
+.ni .ms { font-size: 20px; }
+.ni .n { margin-left: auto; font-size: 12px; font-weight: 600; }
+.ni.sel { background: var(--nav-sel); font-weight: 700; }
+.ni.sel .ms { font-variation-settings: 'FILL' 1, 'wght' 400, 'opsz' 20; color: var(--ink); }
+.lblh { display: flex; align-items: center; justify-content: space-between; padding: 18px 16px 8px 26px; font-size: 16px; font-weight: 500; }
+
+main { background: var(--panel); border-radius: 16px; margin: 0 16px 16px 0; overflow: hidden; display: flex; flex-direction: column; }
+.mtool { height: 48px; display: flex; align-items: center; padding: 0 12px 0 16px; gap: 14px; }
+.mtool .ms { font-size: 20px; }
+.mtool .pg { margin-left: auto; font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 18px; }
+.cats { display: flex; height: 56px; border-bottom: 1px solid var(--line); }
+.cat { width: 254px; display: flex; align-items: center; gap: 16px; padding: 0 16px; font-size: 14px; color: var(--ink2); position: relative; }
+.cat .ms { font-size: 20px; }
+.cat.sel { color: var(--tabline); font-weight: 500; }
+.cat.sel .ms { color: var(--tabline); font-variation-settings: 'FILL' 1, 'wght' 400, 'opsz' 20; }
+.cat.sel::after { content: ''; position: absolute; left: 8px; right: 8px; bottom: 0; height: 3px; border-radius: 3px 3px 0 0; background: var(--tabline); }
+.cat .new { background: #188038; color: #fff; font-size: 11px; font-weight: 500; border-radius: 9px; padding: 1px 7px; margin-left: -6px; }
+.cat .sub { font-size: 12px; color: var(--muted); font-weight: 400; }
+.filters { display: flex; gap: 8px; padding: 4px 16px 12px; }
+.fchip { border: 1px solid color-mix(in srgb, var(--ink) 30%, transparent); border-radius: 8px; padding: 5px 10px; font-size: 13px; color: var(--ink2); display: flex; align-items: center; gap: 4px; }
+.fchip .ms { font-size: 18px; }
+
+.listwrap { padding-left: 16px; font-family: Roboto, sans-serif; }
+.listwrap .gc-root { margin-right: 16px; }
+.list { margin-left: -16px; }
+.row { height: 40px; display: flex; align-items: center; font-size: 14px; box-shadow: inset 0 -1px 0 0 var(--line); background: var(--read); color: var(--ink); }
+.row.u { background: var(--panel); }
+.row .cb, .row .st { font-size: 20px; width: 20px; margin-left: 14px; color: color-mix(in srgb, var(--ink) 35%, transparent); }
+.row .st { margin-left: 12px; }
+.row .st.on { color: #f4b400; font-variation-settings: 'FILL' 1, 'wght' 400, 'opsz' 20; }
+.row .snd { width: 200px; padding-left: 16px; padding-right: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row .y6 { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 16px; }
+.row .sub { color: var(--ink); }
+.row .snip { color: var(--muted); }
+.row .dt { width: 86px; text-align: right; padding-right: 20px; font-size: 12px; }
+.row.u .snd, .row.u .sub, .row.u .dt { font-weight: 700; }
+.row .att { font-size: 18px; color: var(--muted); margin-right: 8px; }
+
+.popup { position: absolute; top: 80px; right: 66px; width: 380px; height: 600px; overflow: hidden; border-radius: 12px; background: #fff; box-shadow: 0 2px 6px rgba(0,0,0,.15), 0 12px 40px rgba(0,0,0,.22); border: 1px solid rgba(0,0,0,.08); }
+.popup img { width: 380px; display: block; }
+
+.callout { position: absolute; width: 470px; padding: 28px 32px 30px; border-radius: 20px; color: #fff; background: linear-gradient(145deg, #4f46e5, #6366f1); box-shadow: 0 30px 70px rgba(30,27,75,.38), 0 4px 14px rgba(30,27,75,.22); font-family: 'Google Sans Flex', sans-serif; }
+.callout .brand { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 600; opacity: .95; }
+.callout .brand img { width: 26px; height: 26px; border-radius: 7px; box-shadow: 0 0 0 1px rgba(255,255,255,.35); }
+.callout h1 { margin: 14px 0 10px; font-size: 38px; line-height: 1.08; font-weight: 700; letter-spacing: -0.8px; }
+.callout p { margin: 0; font-size: 17px; line-height: 1.45; opacity: .92; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+const P = new URLSearchParams(location.search);
+const scene = P.get('scene') || 'hero';
+const ICON = '../../assets/icon-128.png';
+const RAW = 'raw/';
+
+const L = { Visa: 0, Money: 1, Home: 2 };
+const inbox = [
+  { s: 'Plotline Weekly', sub: 'Ten tips for balcony tomatoes', sn: 'Late-season care, what to prune now, and a reader question about pots on a north-facing balcony.', d: '11:14 AM', u: 1 },
+  { s: 'Northbank', sub: 'New sign-in to your account from Chrome on Mac', sn: 'If this was you, there is nothing to do. If not, lock your card and reset your password now.', d: '11:02 AM', u: 1, c: 0.9, l: ['Money'] },
+  { s: 'Greenhouse Shop', sub: 'Your order has shipped', sn: 'Order #20417 is on its way and should arrive on Friday. Track your parcel in the app.', d: '10:48 AM' },
+  { s: 'Maya Lindqvist', sub: 'Re: Apartment contract, can you sign by Thursday?', sn: 'Hi Alex, the landlord needs the signed copy back by Thursday noon, otherwise the flat goes to the next person on the list.', d: '10:31 AM', u: 1, c: 0.96, l: ['Home'] },
+  { s: 'City Library', sub: 'Two books are due back on Friday', sn: 'Renew online or return them to any branch before closing time.', d: '9:57 AM', u: 1 },
+  { s: 'Weather Digest', sub: 'A grey week ahead', sn: 'Rain on Tuesday and Wednesday, clearing up by the weekend.', d: '9:20 AM' },
+  { s: 'Immigration Service', sub: 'Residence permit appointment: Monday 28 Sep, 09:00', sn: 'Bring your passport, the invitation letter and one recent photo. Arrive ten minutes early.', d: '8:45 AM', u: 1, c: 0.84, l: ['Visa'], a: 1 },
+  { s: 'Daniel Ortiz', sub: 'Photos from Saturday', sn: 'Finally uploaded them, the one by the canal came out great. Link inside.', d: '8:12 AM', u: 1 },
+  { s: 'Willow Property', sub: 'Rent for October is due on the 1st', sn: 'Pay through the tenant portal or by bank transfer with your unit number as reference.', d: 'Sep 22', u: 1, l: ['Home'] },
+  { s: 'Meadow Energy', sub: 'Your September invoice is ready', sn: 'Amount due 84.20, collected by direct debit on 30 September.', d: 'Sep 22', u: 1, l: ['Money'], a: 1 },
+  { s: 'Hopper Rides', sub: 'Your Tuesday evening ride', sn: 'Total 12.40, paid with the card ending 4417. Rate your driver.', d: 'Sep 22' },
+  { s: 'Forge CI', sub: 'Build passed on main', sn: 'All 214 checks passed in 3m 12s for commit 9f2c1ab.', d: 'Sep 22' },
+  { s: 'Sara Kovac', sub: 'Dinner next week?', sn: 'We are free Thursday or Friday, whichever works better for the two of you.', d: 'Sep 21', st: 1 },
+  { s: 'Municipal Tax Office', sub: 'Your 2026 assessment is available', sn: 'Log in to view the assessment and the payment schedule.', d: 'Sep 21' },
+  { s: 'Trailhead Outdoor', sub: 'Autumn sale: 30% off rain jackets', sn: 'Three days only. Free returns on every order.', d: 'Sep 21' },
+];
+const search = [
+  { s: 'Studio Nine Design', sub: 'Second reminder: invoice 118 is 14 days overdue', sn: 'Please settle the balance this week to avoid the late fee in our terms.', d: '10:05 AM', u: 1, c: 0.88, l: ['Money'], a: 1 },
+  { s: 'Meadow Energy', sub: 'Your September invoice is ready', sn: 'Amount due 84.20, collected by direct debit on 30 September.', d: 'Sep 22', u: 1, l: ['Money'], a: 1 },
+  { s: 'Harbor Accounting', sub: 'Q3 invoice and next steps', sn: 'Attached is the invoice for the quarterly filing. Payment within 30 days.', d: 'Sep 20', u: 1, l: ['Money'], a: 1 },
+  { s: 'Willow Property', sub: 'Invoice for the boiler repair', sn: 'Your share of the repair on 12 September, as agreed in the building meeting.', d: 'Sep 18', u: 1, l: ['Home', 'Money'], a: 1 },
+  { s: 'Greenhouse Shop', sub: 'Invoice for order #20417', sn: 'Thanks for your order. Your invoice is attached.', d: 'Sep 17', a: 1 },
+  { s: 'Meadow Energy', sub: 'Your August invoice is ready', sn: 'Amount due 91.75, collected by direct debit on 31 August.', d: 'Aug 23', a: 1 },
+  { s: 'Cloudnest Hosting', sub: 'Invoice for August', sn: 'Your payment of 9.00 was received. Thank you.', d: 'Aug 1', a: 1 },
+  { s: 'Harbor Accounting', sub: 'Q2 invoice', sn: 'Attached is the invoice for the quarterly filing.', d: 'Jun 30', a: 1 },
+  { s: 'Studio Nine Design', sub: 'Invoice 104', sn: 'For the logo refresh delivered in June.', d: 'Jun 28', a: 1 },
+  { s: 'Hopper Rides', sub: 'Your invoice for June', sn: 'Monthly business summary with all rides and invoices.', d: 'Jun 2', a: 1 },
+  { s: 'Meadow Energy', sub: 'Annual statement and invoice', sn: 'Your yearly usage and the settlement for last year.', d: 'May 15', a: 1 },
+  { s: 'Cloudnest Hosting', sub: 'Invoice for May', sn: 'Your payment of 9.00 was received. Thank you.', d: 'May 1', a: 1 },
+];
+
+function order(rows) {
+  const idx = rows.map((r, i) => ({ ...r, i }));
+  const crit = idx.filter((r) => r.u && r.c).sort((a, b) => b.c - a.c);
+  const unread = idx.filter((r) => r.u && !r.c);
+  const read = idx.filter((r) => !r.u);
+  return [...crit, ...unread, ...read];
+}
+
+function chips(r) {
+  if (!r.u || (!r.c && !r.l)) return '';
+  let h = '<span class="gc-chips">';
+  if (r.c) h += '<span class="gc-badge">Critical</span>';
+  for (const n of r.l || []) h += `<span class="gc-chip gc-hue-${L[n]}">${n}</span>`;
+  return h + '</span>';
+}
+
+function rowsHtml(rows, withChips) {
+  return rows.map((r) => `
+    <div class="row ${r.u ? 'u' : ''}">
+      <span class="ms cb">check_box_outline_blank</span>
+      <span class="ms st ${r.st ? 'on' : ''}">star</span>
+      <span class="snd">${r.s}</span>
+      <span class="y6">${withChips ? chips(r) : ''}<span class="sub">${r.sub}</span><span class="snip"> - ${r.sn}</span></span>
+      ${r.a ? '<span class="ms att">attach_file</span>' : ''}
+      <span class="dt">${r.d}</span>
+    </div>`).join('');
+}
+
+function gmailLogo() {
+  return `<svg width="38" height="29" viewBox="52 42 88 66"><path fill="#4285f4" d="M58 108h14V74L52 59v43c0 3.32 2.69 6 6 6"/><path fill="#34a853" d="M120 108h14c3.32 0 6-2.69 6-6V59l-20 15"/><path fill="#fbbc04" d="M120 48v26l20-15v-8c0-7.42-8.47-11.65-14.4-7.2"/><path fill="#ea4335" d="M72 74V48l24 18 24-18v26L96 92"/><path fill="#c5221f" d="M52 51v8l20 15V48l-5.6-4.2c-5.94-4.45-14.4-.22-14.4 7.2"/></svg>`;
+}
+
+const S = {
+  hero: { rows: inbox, sorted: 1, bar: '<span class="gc-count">8 unread</span>',
+    callout: { pos: 'right:40px;bottom:40px', h: 'Unread first.<br>Critical on top.', p: 'Gmail\'s own list, reordered in place. The contract that needs a signature beats the newsletter.' } },
+  labels: { rows: inbox, sorted: 1, bar: '<span class="gc-count">8 unread</span>', popup: { img: 'popup-set.png', y: 244 },
+    callout: { pos: 'left:24px;bottom:32px', h: 'Your labels,<br>in plain words.', p: 'Name a label, describe what belongs in it. Jev answers one question per label, per email.' } },
+  dark: { rows: inbox, sorted: 1, dark: 1, bar: '<span class="gc-count">8 unread</span>',
+    callout: { pos: 'right:40px;bottom:40px', h: 'Light or dark,<br>it fits right in.', p: 'Chips and the status line follow the Gmail theme you already use.' } },
+  privacy: { rows: inbox, sorted: 0, bar: '<span class="gc-count">8 unread</span><span class="gc-error">Open Jev Inbox to finish setup.</span>', popup: { img: 'popup-firstrun.png', y: 0 },
+    callout: { pos: 'left:24px;bottom:32px', h: 'Nothing is sent<br>until you say so.', p: 'Only sender, subject, snippet and date of unread rows. Never bodies or attachments.' } },
+  search: { rows: search, sorted: 1, search: 1, bar: '<span class="gc-count">4 unread</span>', popup: { img: 'popup-set.png', y: 0 },
+    callout: { pos: 'left:24px;bottom:32px', h: 'Your key,<br>your provider.', p: 'Vercel AI Gateway or TypeSafe. Works on the inbox, its tabs and search results.' } },
+};
+const s = S[scene];
+if (s.dark) document.documentElement.classList.add('dark');
+const rows = s.sorted ? order(s.rows) : s.rows;
+const title = s.search ? 'Search results - alex@example.com - Gmail' : 'Inbox (8) - alex@example.com - Gmail';
+const hash = s.search ? '#search/invoice' : '#inbox';
+
+document.getElementById('app').innerHTML = `
+<div class="tabs">
+  <div class="lights"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div>
+  <div class="tab">${gmailLogo().replace('width="38" height="29"', 'width="16" height="12"')}<span class="t">${title}</span><span class="ms x">close</span></div>
+  <span class="ms newtab">add</span>
+</div>
+<div class="toolbar">
+  <span class="ms">arrow_back</span><span class="ms" style="opacity:.45">arrow_forward</span><span class="ms">refresh</span>
+  <div class="omni"><span class="ms">tune</span><span><span class="host">mail.google.com</span><span class="path">/mail/u/0/${hash}</span></span><span class="ms" style="margin-left:auto">star</span></div>
+  <div class="ext ${s.popup ? 'on' : ''}"><img src="${ICON}"></div>
+  <span class="ms">extension</span>
+  <div class="pfp">A</div>
+  <span class="ms">more_vert</span>
+</div>
+<div class="gm">
+  <div class="gh">
+    <div class="menu"><span class="ms">menu</span></div>
+    <div class="logo">${gmailLogo()}<span>Gmail</span></div>
+    <div class="search"><span class="ms">search</span><span class="q ${s.search ? 'filled' : ''}">${s.search ? 'invoice' : 'Search mail'}</span>${s.search ? '<span class="ms">close</span>' : ''}<span class="ms">tune</span></div>
+    <div class="right"><div class="status-pill"><i></i>Active</div><span class="ms">help</span><span class="ms">settings</span><span class="ms">apps</span><div class="pfp">A</div></div>
+  </div>
+  <nav>
+    <div class="compose"><span class="ms">edit</span>Compose</div>
+    <div class="ni ${s.search ? '' : 'sel'}"><span class="ms">inbox</span>Inbox<span class="n">8</span></div>
+    <div class="ni"><span class="ms">star</span>Starred</div>
+    <div class="ni"><span class="ms">schedule</span>Snoozed</div>
+    <div class="ni"><span class="ms">send</span>Sent</div>
+    <div class="ni"><span class="ms">draft</span>Drafts<span class="n" style="font-weight:400">2</span></div>
+    <div class="ni"><span class="ms">expand_more</span>More</div>
+    <div class="lblh">Labels<span class="ms">add</span></div>
+    <div class="ni"><span class="ms">label</span>Family</div>
+    <div class="ni"><span class="ms">label</span>Receipts</div>
+    <div class="ni"><span class="ms">label</span>Travel</div>
+  </nav>
+  <main>
+    <div class="mtool"><span class="ms">check_box_outline_blank</span><span class="ms" style="margin-left:-12px;font-size:16px">arrow_drop_down</span><span class="ms">refresh</span><span class="ms">more_vert</span>
+      <div class="pg">${s.search ? '1-12 of 12' : '1-50 of 2,318'}<span class="ms" style="opacity:.5">chevron_left</span><span class="ms">chevron_right</span></div></div>
+    ${s.search
+      ? `<div class="filters"><span class="fchip">From<span class="ms">arrow_drop_down</span></span><span class="fchip">Any time<span class="ms">arrow_drop_down</span></span><span class="fchip">Has attachment</span><span class="fchip">To<span class="ms">arrow_drop_down</span></span><span class="fchip">Is unread</span><span class="fchip">Advanced search</span></div>`
+      : `<div class="cats">
+      <div class="cat sel"><span class="ms">inbox</span>Primary</div>
+      <div class="cat"><span class="ms">sell</span>Promotions<span class="new">3 new</span></div>
+      <div class="cat"><span class="ms">group</span>Social</div>
+      <div class="cat"><span class="ms">info</span>Updates<span class="new" style="background:#e37400">12 new</span></div>
+    </div>`}
+    <div class="listwrap">
+      <div class="gc-root" id="gc-unread">${s.bar}</div>
+      <div class="list">${rowsHtml(rows, s.sorted)}</div>
+    </div>
+  </main>
+</div>
+${s.popup ? `<div class="popup"><img src="${RAW}${s.popup.img}" style="margin-top:-${s.popup.y}px"></div>` : ''}
+${P.get('nocallout') ? '' : `<div class="callout" style="${s.callout.pos}"><div class="brand"><img src="${ICON}">Jev Inbox</div><h1>${s.callout.h}</h1><p>${s.callout.p}</p></div>`}
+`;
+const callout = document.querySelector('.callout');
+const place = () => {
+  if (!callout) return;
+  const rowEls = document.querySelectorAll('.row');
+  callout.style.top = rowEls[s.search ? 9 : 8].getBoundingClientRect().top + 'px';
+  callout.style.bottom = 'auto';
+};
+place();
+document.fonts.ready.then(place);
+</script>
+</body>
+</html>
