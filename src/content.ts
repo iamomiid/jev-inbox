@@ -33,6 +33,7 @@ type Visual = {
   transform: string;
   transition: string;
   applied: string;
+  transitionApplied: string;
 };
 
 type Ranked = {
@@ -50,6 +51,7 @@ const BASE_BACKOFF_MS = 60_000;
 const MAX_BACKOFF_MS = 600_000;
 const CHIP_HUES = 8;
 const CACHE_PREFIX = 'crit:';
+const ANIMATION_TRANSITION = 'transform 180ms';
 
 let bar: HTMLElement | null = null;
 let observer: MutationObserver | null = null;
@@ -283,6 +285,7 @@ function visualOf(row: HTMLTableRowElement): Visual {
     transform: row.style.transform,
     transition: row.style.transition,
     applied: row.style.transform,
+    transitionApplied: row.style.transition,
   };
   visuals.set(row, created);
   return created;
@@ -292,8 +295,10 @@ function pruneVisuals(rows: HTMLTableRowElement[]): void {
   const keep = new Set(rows);
   for (const [row, visual] of [...visuals]) {
     if (keep.has(row)) continue;
-    row.style.transform = visual.transform;
-    row.style.transition = visual.transition;
+    if (row.style.transform === visual.applied) row.style.transform = visual.transform;
+    if (row.style.transition === visual.transitionApplied) {
+      row.style.transition = visual.transition;
+    }
     visuals.delete(row);
     animating.delete(row);
   }
@@ -318,26 +323,39 @@ function observeSizes(list: HTMLElement | null): void {
   }
 }
 
+function rowTranslateY(row: HTMLTableRowElement): number {
+  const value = window.getComputedStyle(row).transform;
+  if (value === 'none') return 0;
+  const parts = value.slice(value.indexOf('(') + 1, -1).split(',');
+  const parsed = Number.parseFloat(parts[parts.length === 16 ? 13 : 5] ?? '');
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
 function applyRowOrder(): void {
   const list = currentList;
   if (list === null) return;
   const rows = [...list.querySelectorAll<HTMLTableRowElement>('tr.zA')];
   pruneVisuals(rows);
+  const listTop = list.getBoundingClientRect().top;
   const items: Ranked[] = [];
-  let top = 0;
   for (let index = 0; index < rows.length; index++) {
     const row = rows[index];
-    const height = row.getBoundingClientRect().height;
     const key = cacheKeyOf(row);
+    const rect = row.getBoundingClientRect();
     items.push({
       row,
       index,
-      height,
-      top,
+      height: rect.height,
+      top: rect.top - listTop - rowTranslateY(row),
       unread: row.classList.contains('zE'),
       classification: key === null ? undefined : classifications.get(key),
     });
-    top += height;
+  }
+  const slots = items.map((item) => item.top);
+  const gaps: { top: number; bottom: number }[] = [];
+  for (let index = 1; index < items.length; index++) {
+    const bottom = items[index - 1].top + items[index - 1].height;
+    if (items[index].top - bottom > 0.01) gaps.push({ top: bottom, bottom: items[index].top });
   }
   const critical: Ranked[] = [];
   const unread: Ranked[] = [];
@@ -362,22 +380,42 @@ function applyRowOrder(): void {
     animateNextOrder && !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   animateNextOrder = false;
   const changed: { row: HTMLTableRowElement; value: string }[] = [];
-  let target = 0;
-  for (const item of [...critical, ...unread, ...read, ...rest]) {
+  const order = [...critical, ...unread, ...read, ...rest];
+  let previousBottom: number | undefined;
+  for (let slot = 0; slot < order.length; slot++) {
+    const item = order[slot];
+    const slotTop = slots[slot] ?? item.top;
+    let target = previousBottom === undefined ? slotTop : Math.max(slotTop, previousBottom);
+    for (const gap of gaps) {
+      if (gap.bottom <= target) continue;
+      if (gap.top >= target + item.height) break;
+      target = gap.bottom;
+    }
+    previousBottom = target + item.height;
     const visual = visualOf(item.row);
+    if (item.row.style.transform !== visual.applied) visual.transform = item.row.style.transform;
     const offset = Math.round((target - item.top) * 100) / 100;
-    const value = offset === 0 ? visual.transform : `translateY(${offset}px)`;
+    const value =
+      offset === 0
+        ? visual.transform
+        : visual.transform === ''
+          ? `translateY(${offset}px)`
+          : `${visual.transform} translateY(${offset}px)`;
     if (value !== visual.applied) {
       visual.applied = value;
       changed.push({ row: item.row, value });
     }
-    target += item.height;
   }
   if (changed.length === 0) return;
   finishAnimations();
   if (animate) {
     for (const item of changed) {
-      item.row.style.transition = 'transform 180ms';
+      const visual = visualOf(item.row);
+      if (item.row.style.transition !== visual.transitionApplied) {
+        visual.transition = item.row.style.transition;
+      }
+      visual.transitionApplied = ANIMATION_TRANSITION;
+      item.row.style.transition = ANIMATION_TRANSITION;
       animating.add(item.row);
     }
     animationCleanupId = window.setTimeout(finishAnimations, 250);
@@ -390,7 +428,10 @@ function finishAnimations(): void {
   animationCleanupId = undefined;
   for (const row of animating) {
     const visual = visuals.get(row);
-    if (visual !== undefined) row.style.transition = visual.transition;
+    if (visual === undefined) continue;
+    if (row.style.transition !== ANIMATION_TRANSITION) continue;
+    row.style.transition = visual.transition;
+    visual.transitionApplied = visual.transition;
   }
   animating.clear();
 }
@@ -400,8 +441,10 @@ function restoreList(list: HTMLElement | null): void {
   for (const slot of list?.querySelectorAll('span.gc-chips') ?? []) slot.remove();
   for (const [row, visual] of [...visuals]) {
     if (list !== null && !list.contains(row)) continue;
-    row.style.transform = visual.transform;
-    row.style.transition = visual.transition;
+    if (row.style.transform === visual.applied) row.style.transform = visual.transform;
+    if (row.style.transition === visual.transitionApplied) {
+      row.style.transition = visual.transition;
+    }
     visuals.delete(row);
     animating.delete(row);
   }
@@ -769,6 +812,7 @@ async function bootstrap(): Promise<void> {
   });
   chrome.storage.onChanged.addListener((changes) => {
     let structural = false;
+    let immediateOrder = false;
     for (const [storageKey, change] of Object.entries(changes)) {
       if (!storageKey.startsWith(CACHE_PREFIX)) continue;
       const cacheKey = storageKey.slice(CACHE_PREFIX.length);
@@ -811,6 +855,7 @@ async function bootstrap(): Promise<void> {
     if (changes.enabled) {
       enabled = changes.enabled.newValue !== false;
       structural = true;
+      immediateOrder = true;
     }
     if (changes.threshold && typeof changes.threshold.newValue === 'number') {
       threshold = changes.threshold.newValue;
@@ -822,8 +867,10 @@ async function bootstrap(): Promise<void> {
       viewEnabled[view] =
         typeof change.newValue === 'boolean' ? change.newValue : DEFAULT_SETTINGS[key];
       structural = true;
+      immediateOrder = true;
     }
     if (structural) generation += 1;
+    if (immediateOrder) applyOrderNow();
     schedule();
   });
   void sync();
