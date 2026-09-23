@@ -31,7 +31,7 @@ Then open `chrome://extensions`, enable Developer mode, choose "Load unpacked", 
 
 Jev Inbox classifies through Jev, reachable either way:
 
-- **Vercel AI Gateway**: create a key in the Vercel dashboard (`https://vercel.com/docs/ai-gateway`), pick "AI Gateway" in the popup, and paste the key.
+- **Vercel AI Gateway**: create a key in the Vercel dashboard (`https://vercel.com/docs/ai-gateway`), pick "Vercel AI Gateway" in the popup, and paste the key.
 - **TypeSafe**: create a key at `https://docs.typesafe.ai`, pick "TypeSafe" in the popup, and paste the key.
 
 Keys stay in `chrome.storage.local`, are only read by the extension's service worker, and are sent only to the provider you selected. The popup keeps only the last four characters of each key, so it can show that one is saved without reading it back; Replace and Remove are there when you want to change it. "Test connection" runs one tiny classification on a fixed dummy state and reports the result inline.

@@ -20,7 +20,7 @@ Nothing else. Email bodies are never read, never collected, and never sent. Atta
 
 The row metadata goes to exactly one destination, the provider you select in the popup:
 
-- Vercel AI Gateway (`https://ai-gateway.vercel.sh`), using the AI Gateway key you pasted, or
+- Vercel AI Gateway (`https://ai-gateway.vercel.sh`), using the Vercel AI Gateway key you pasted, or
 - TypeSafe (`https://api.typesafe.ai`), using the TypeSafe key you pasted.
 
 Both act as processors. Requests are made under your own key and your own account, so the provider's terms and data policies apply to them. Jev Inbox has no servers of its own: nothing is proxied, relayed, or stored anywhere except your browser and the provider you chose. No analytics, no telemetry, no tracking, no advertising identifiers.
