@@ -1,6 +1,6 @@
 # Jev Inbox for Gmail
 
-Jev Inbox is a Chrome extension that reorders the message list Gmail already renders: unread mail moves to the top, the messages that matter most sit above the rest, and every classified row carries chips for your own labels. A thin bar above the list shows the unread count, in-flight progress, and errors. You choose the views it touches (inbox, other inbox tabs, search results, labels and other folders), the provider it classifies through, your labels, and how confident a classification has to be before a row counts as critical.
+Jev Inbox is a Chrome extension that reorders the message list Gmail already renders, on screen only: unread mail moves to the top, the messages that matter most sit above the rest, and every classified row carries chips for your own labels. A thin bar above the list shows the unread count, in-flight progress, and errors. You choose the views it touches (inbox, other inbox tabs, search results, labels and other folders), the provider it classifies through, your labels, and how confident a classification has to be before a row counts as critical. Nothing moves in Gmail's own DOM, so a click, a checkbox, a star, and a hover action always land on the row you see.
 
 ![Gmail list with the unread bar, critical rows and chips](docs/images/list-light.png)
 
@@ -53,10 +53,10 @@ Only row metadata leaves your browser: sender name, sender address, subject, the
 ## Limitations
 
 - Only the unread rows in the Gmail list currently loaded are classified. Scrolling further classifies more as they appear.
-- It reorders and labels what Gmail already shows. It never marks, archives, deletes, or opens mail.
+- It only moves rows on screen, never in Gmail's DOM, so Gmail's own clicks, selection, and actions keep pointing at the row you see. It never marks, archives, deletes, or opens mail.
 - One tab at a time does the work. Multiple open Gmail tabs share the same cache but each reorders its own list.
 - Gmail's markup changes without notice. If Gmail renames the parts of the list, injection stops until the selectors are updated (`docs/gmail-dom.md`).
-- Keyboard `j` and `k` follow Gmail's own row order, so after a reorder they move in the order you see.
+- Keyboard `j` and `k` follow Gmail's own row order, not the order on screen, so the selection jumps between slots as it moves down the list.
 - It is an unofficial project. Not affiliated with Google, TypeSafe, or Vercel.
 
 ## Development
@@ -68,7 +68,7 @@ npm run typecheck  # tsc --noEmit
 
 `npm run build` writes `dist/`, which holds the unpacked extension.
 
-`dev/demo.html` is a standalone Gmail-like list with made-up mail, a stubbed `chrome` API, and canned classifications, so nothing is sent anywhere. Build first, then open the file in Chrome. It accepts `?theme=dark` for the dark list and `?ack=0` to simulate a browser that has not accepted the first-run notice.
+`dev/demo.html` is a standalone Gmail-like list with made-up mail, a stubbed `chrome` API, and canned classifications, so nothing is sent anywhere. Build first, then open the file in Chrome. It accepts `?theme=dark` for the dark list and `?ack=0` to simulate a browser that has not accepted the first-run notice. Clicking a row resolves its thread the way Gmail does, by the row's index in the list, and reports it as `Opened: <subject>` in the demo line, so a wrong mapping shows up as a wrong subject.
 
 `assets/icon.svg` is the icon source. The PNGs next to it are rendered from it and copied into `dist/assets` by the build.
 

@@ -29,18 +29,17 @@ type Failure = {
   nextAttemptAt: number;
 };
 
-type Anim = {
-  row: HTMLTableRowElement;
+type Visual = {
   transform: string;
   transition: string;
+  applied: string;
 };
 
-type Tracked = {
+type Ranked = {
   row: HTMLTableRowElement;
   index: number;
-};
-
-type Ranked = Tracked & {
+  height: number;
+  top: number;
   unread: boolean;
   classification: Classification | undefined;
 };
@@ -55,6 +54,7 @@ const CACHE_PREFIX = 'crit:';
 let bar: HTMLElement | null = null;
 let observer: MutationObserver | null = null;
 let classObserver: MutationObserver | null = null;
+let resizeObserver: ResizeObserver | null = null;
 let observedList: HTMLElement | null = null;
 let inFlight = false;
 let halted = false;
@@ -72,7 +72,7 @@ let orderList: HTMLElement | null = null;
 let orderRoute = '';
 let animateNextOrder = false;
 let orderPassQueued = false;
-let flipCleanupId: number | undefined;
+let animationCleanupId: number | undefined;
 
 const viewEnabled: Record<View, boolean> = {
   inbox: DEFAULT_SETTINGS.viewInbox,
@@ -83,8 +83,9 @@ const viewEnabled: Record<View, boolean> = {
 
 const candidates = new Map<string, Entry>();
 const failures = new Map<string, Failure>();
-const animating = new Map<HTMLTableRowElement, Anim>();
-const orderIndex = new Map<string, number>();
+const animating = new Set<HTMLTableRowElement>();
+const visuals = new Map<HTMLTableRowElement, Visual>();
+const sizeObserved = new Set<Element>();
 const classifications = new Map<string, Classification>();
 
 function schedule(): void {
@@ -275,73 +276,76 @@ function classifiableUnreadKey(row: HTMLTableRowElement): string | null {
   return cacheKeyOf(row);
 }
 
-function recordOrder(list: HTMLElement): void {
-  const rows = [...list.querySelectorAll<HTMLTableRowElement>('tr.zA')];
-  const ids = rows.map((row) => rowThreadId(row));
-  const withId = ids.filter((id): id is string => id !== null);
-  const knownCount = withId.filter((id) => orderIndex.has(id)).length;
-  if (orderIndex.size > 0 && knownCount * 2 < withId.length) orderIndex.clear();
-  const known = new Set(orderIndex.keys());
-  for (let i = 0; i < rows.length; i++) {
-    const id = ids[i];
-    if (id === null || known.has(id)) continue;
-    let prev: number | undefined;
-    for (let j = i - 1; j >= 0 && prev === undefined; j--) {
-      const other = ids[j];
-      if (other === null || !known.has(other)) continue;
-      prev = orderIndex.get(other);
-    }
-    let next: number | undefined;
-    for (let j = i + 1; j < rows.length && next === undefined; j++) {
-      const other = ids[j];
-      if (other === null || !known.has(other)) continue;
-      next = orderIndex.get(other);
-    }
-    if (prev === undefined && next === undefined) orderIndex.set(id, 0);
-    else if (prev === undefined) orderIndex.set(id, (next as number) - 1);
-    else if (next === undefined) orderIndex.set(id, prev + 1);
-    else orderIndex.set(id, (prev + next) / 2);
-    known.add(id);
+function visualOf(row: HTMLTableRowElement): Visual {
+  const existing = visuals.get(row);
+  if (existing !== undefined) return existing;
+  const created: Visual = {
+    transform: row.style.transform,
+    transition: row.style.transition,
+    applied: row.style.transform,
+  };
+  visuals.set(row, created);
+  return created;
+}
+
+function pruneVisuals(rows: HTMLTableRowElement[]): void {
+  const keep = new Set(rows);
+  for (const [row, visual] of [...visuals]) {
+    if (keep.has(row)) continue;
+    row.style.transform = visual.transform;
+    row.style.transition = visual.transition;
+    visuals.delete(row);
+    animating.delete(row);
   }
 }
 
-function applyOrder(rows: HTMLTableRowElement[]): void {
-  if (rows.length === 0) return;
-  const parent = rows[0].parentElement;
-  if (parent === null) return;
-  const targets = rows.filter((row) => row.parentElement === parent);
-  let ref = parent.firstElementChild;
-  for (const row of targets) {
-    if (row === ref) {
-      ref = ref.nextElementSibling;
-    } else {
-      parent.insertBefore(row, ref);
-    }
+function observeSizes(list: HTMLElement | null): void {
+  if (resizeObserver === null) return;
+  const keep = new Set<Element>();
+  if (list !== null) {
+    keep.add(list);
+    for (const row of list.querySelectorAll<HTMLTableRowElement>('tr.zA')) keep.add(row);
+  }
+  for (const element of [...sizeObserved]) {
+    if (keep.has(element)) continue;
+    resizeObserver.unobserve(element);
+    sizeObserved.delete(element);
+  }
+  for (const element of keep) {
+    if (sizeObserved.has(element)) continue;
+    resizeObserver.observe(element);
+    sizeObserved.add(element);
   }
 }
 
 function applyRowOrder(): void {
   const list = currentList;
   if (list === null) return;
-  const ranked: Ranked[] = [];
-  for (const row of list.querySelectorAll<HTMLTableRowElement>('tr.zA')) {
-    const id = rowThreadId(row);
-    if (id === null) continue;
-    const index = orderIndex.get(id);
-    if (index === undefined) continue;
+  const rows = [...list.querySelectorAll<HTMLTableRowElement>('tr.zA')];
+  pruneVisuals(rows);
+  const items: Ranked[] = [];
+  let top = 0;
+  for (let index = 0; index < rows.length; index++) {
+    const row = rows[index];
+    const height = row.getBoundingClientRect().height;
     const key = cacheKeyOf(row);
-    ranked.push({
+    items.push({
       row,
       index,
+      height,
+      top,
       unread: row.classList.contains('zE'),
       classification: key === null ? undefined : classifications.get(key),
     });
+    top += height;
   }
   const critical: Ranked[] = [];
   const unread: Ranked[] = [];
   const read: Ranked[] = [];
-  for (const item of ranked) {
-    if (!item.unread) read.push(item);
+  const rest: Ranked[] = [];
+  for (const item of items) {
+    if (rowThreadId(item.row) === null) rest.push(item);
+    else if (!item.unread) read.push(item);
     else if (item.classification !== undefined && isCriticalClassification(item.classification)) {
       critical.push(item);
     } else unread.push(item);
@@ -357,71 +361,51 @@ function applyRowOrder(): void {
   const animate =
     animateNextOrder && !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   animateNextOrder = false;
-  const before = animate
-    ? new Map(ranked.map((item) => [item.row, item.row.getBoundingClientRect()]))
-    : null;
-  applyOrder([...critical, ...unread, ...read].map((item) => item.row));
-  if (before !== null) flipMoved(ranked, before);
+  const changed: { row: HTMLTableRowElement; value: string }[] = [];
+  let target = 0;
+  for (const item of [...critical, ...unread, ...read, ...rest]) {
+    const visual = visualOf(item.row);
+    const offset = Math.round((target - item.top) * 100) / 100;
+    const value = offset === 0 ? visual.transform : `translateY(${offset}px)`;
+    if (value !== visual.applied) {
+      visual.applied = value;
+      changed.push({ row: item.row, value });
+    }
+    target += item.height;
+  }
+  if (changed.length === 0) return;
+  finishAnimations();
+  if (animate) {
+    for (const item of changed) {
+      item.row.style.transition = 'transform 180ms';
+      animating.add(item.row);
+    }
+    animationCleanupId = window.setTimeout(finishAnimations, 250);
+  }
+  for (const item of changed) item.row.style.transform = item.value;
 }
 
 function finishAnimations(): void {
-  clearTimeout(flipCleanupId);
-  flipCleanupId = undefined;
-  for (const anim of animating.values()) {
-    anim.row.style.transform = anim.transform;
-    anim.row.style.transition = anim.transition;
+  clearTimeout(animationCleanupId);
+  animationCleanupId = undefined;
+  for (const row of animating) {
+    const visual = visuals.get(row);
+    if (visual !== undefined) row.style.transition = visual.transition;
   }
   animating.clear();
 }
 
-function flipMoved(ranked: Ranked[], before: Map<HTMLTableRowElement, DOMRect>): void {
-  const moved: { row: HTMLTableRowElement; dx: number; dy: number }[] = [];
-  for (const item of ranked) {
-    const first = before.get(item.row);
-    if (first === undefined) continue;
-    const last = item.row.getBoundingClientRect();
-    const dx = first.left - last.left;
-    const dy = first.top - last.top;
-    if (dx === 0 && dy === 0) continue;
-    moved.push({ row: item.row, dx, dy });
-  }
-  if (moved.length === 0) return;
-  finishAnimations();
-  for (const item of moved) {
-    animating.set(item.row, {
-      row: item.row,
-      transform: item.row.style.transform,
-      transition: item.row.style.transition,
-    });
-  }
-  for (const item of moved) {
-    item.row.style.transform = `translate(${item.dx}px, ${item.dy}px)`;
-  }
-  void document.body.offsetWidth;
-  for (const item of moved) {
-    const anim = animating.get(item.row);
-    item.row.style.transition = 'transform 180ms';
-    item.row.style.transform = anim?.transform ?? '';
-  }
-  flipCleanupId = window.setTimeout(() => {
-    finishAnimations();
-  }, 250);
-}
-
 function restoreList(list: HTMLElement | null): void {
   finishAnimations();
-  if (list === null) return;
-  const tracked: Tracked[] = [];
-  for (const row of list.querySelectorAll<HTMLTableRowElement>('tr.zA')) {
-    const id = rowThreadId(row);
-    if (id === null) continue;
-    const index = orderIndex.get(id);
-    if (index === undefined) continue;
-    tracked.push({ row, index });
+  for (const slot of list?.querySelectorAll('span.gc-chips') ?? []) slot.remove();
+  for (const [row, visual] of [...visuals]) {
+    if (list !== null && !list.contains(row)) continue;
+    row.style.transform = visual.transform;
+    row.style.transition = visual.transition;
+    visuals.delete(row);
+    animating.delete(row);
   }
-  tracked.sort((a, b) => a.index - b.index);
-  applyOrder(tracked.map((item) => item.row));
-  for (const slot of list.querySelectorAll('span.gc-chips')) slot.remove();
+  observeSizes(null);
   observer?.takeRecords();
   classObserver?.takeRecords();
 }
@@ -434,21 +418,19 @@ function runOrderPass(): void {
     restoreList(orderList);
     orderList = list ?? null;
     orderRoute = route;
-    orderIndex.clear();
   }
   if (!enabled || view === null || !viewEnabled[view] || !list) {
     restoreList(orderList);
     orderList = null;
-    orderIndex.clear();
     removeBar();
     candidates.clear();
     currentList = null;
     observeRowClasses(null);
     return;
   }
-  recordOrder(list);
   currentList = list;
   observeRowClasses(list);
+  observeSizes(list);
   ensureBar(list);
   render();
 }
@@ -776,6 +758,9 @@ async function bootstrap(): Promise<void> {
     schedule();
   });
   observer.observe(document.documentElement, { childList: true, subtree: true });
+  resizeObserver = new ResizeObserver(() => {
+    applyOrderNow();
+  });
   window.addEventListener('hashchange', () => {
     generation += 1;
     finishAnimations();

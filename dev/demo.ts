@@ -128,3 +128,19 @@ Object.assign(window, {
     },
   },
 });
+
+const gmailOrder = [
+  ...document.querySelectorAll<HTMLTableRowElement>('.Cp tbody tr.zA'),
+].map((row) => (row.querySelector('span.bqe')?.textContent ?? '').replace(/\s+/g, ' ').trim());
+const opened = document.getElementById('demo-opened');
+
+document.addEventListener('click', (event) => {
+  const target = event.target;
+  const row = target instanceof Element ? target.closest('tr.zA') : null;
+  if (!(row instanceof HTMLTableRowElement)) return;
+  const tbody = row.parentElement;
+  const rows = tbody === null ? [] : [...tbody.querySelectorAll<HTMLTableRowElement>('tr.zA')];
+  const index = rows.indexOf(row);
+  const subject = index === -1 ? undefined : gmailOrder[index];
+  if (opened !== null) opened.textContent = `Opened: ${subject ?? 'unknown'}`;
+});
